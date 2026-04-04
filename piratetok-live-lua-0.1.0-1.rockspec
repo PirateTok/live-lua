@@ -14,7 +14,8 @@ description = {
     ]],
     license = "0BSD",
     maintainer = "Zmole Cristian",
-    homepage = "https://github.com/PirateTok/live-lua",
+    homepage = "https://piratetok.boats",
+    labels = {"tiktok", "tiktok-live", "live", "stream", "chat", "gifts", "websocket", "protobuf", "realtime", "piratetok"},
 }
 dependencies = {
     "lua >= 5.1",
