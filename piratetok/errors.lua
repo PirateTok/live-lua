@@ -16,6 +16,10 @@ M.HTTP_ERROR = "HttpError"
 M.WEBSOCKET_ERROR = "WebSocketError"
 M.ROOM_ID_MISSING = "RoomIdMissing"
 M.INVALID_URL = "InvalidUrl"
+M.PROFILE_PRIVATE = "ProfilePrivate"
+M.PROFILE_NOT_FOUND = "ProfileNotFound"
+M.PROFILE_ERROR = "ProfileError"
+M.PROFILE_SCRAPE = "ProfileScrape"
 
 --- Create a structured error table.
 ---@param err_type string one of the constants above

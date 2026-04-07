@@ -16,7 +16,7 @@ local M = {}
 ---@return string|nil body
 ---@return number|nil http status code
 ---@return table|nil error
-local function https_get(host, path, timeout, cookies, user_agent)
+local function https_get(host, path, timeout, cookies, user_agent, accept)
     local tcp = socket.tcp()
     tcp:settimeout(timeout)
 
@@ -48,10 +48,11 @@ local function https_get(host, path, timeout, cookies, user_agent)
     end
 
     local active_ua = user_agent or ua.random_ua()
+    local accept_val = accept or "application/json"
     local headers = "GET " .. path .. " HTTP/1.1\r\n"
         .. "Host: " .. host .. "\r\n"
         .. "User-Agent: " .. active_ua .. "\r\n"
-        .. "Accept: application/json\r\n"
+        .. "Accept: " .. accept_val .. "\r\n"
         .. "Referer: https://www.tiktok.com/\r\n"
     if cookies and cookies ~= "" then
         headers = headers .. "Cookie: " .. cookies .. "\r\n"
@@ -326,6 +327,126 @@ end
 ---@return table|nil error
 function M.check_online(username, timeout, user_agent)
     return M.fetch_room_id(username, timeout, user_agent)
+end
+
+local SIGI_MARKER = 'id="__UNIVERSAL_DATA_FOR_REHYDRATION__"'
+
+--- Scrape a TikTok profile page and extract profile data from the SIGI JSON.
+-- Stateless — no caching. Use helpers.profile_cache for cached access.
+---@param username string TikTok username (with or without @)
+---@param ttwid string valid ttwid cookie value
+---@param timeout number seconds (default 15)
+---@param user_agent string|nil override UA (default: random from pool)
+---@param cookies string|nil extra cookies (sessionid, sid_tt)
+---@return table|nil profile table
+---@return table|nil error
+function M.scrape_profile(username, ttwid, timeout, user_agent, cookies)
+    timeout = timeout or 15
+    local clean = username:gsub("^@", ""):match("^%s*(.-)%s*$"):lower()
+
+    local cookie_val = "ttwid=" .. ttwid
+    if cookies and cookies ~= "" then
+        -- strip user-provided ttwid so the managed one wins
+        local filtered = {}
+        for pair in cookies:gmatch("[^;]+") do
+            pair = pair:match("^%s*(.-)%s*$")
+            if not pair:match("^ttwid=") then
+                filtered[#filtered + 1] = pair
+            end
+        end
+        if #filtered > 0 then
+            cookie_val = cookie_val .. "; " .. table.concat(filtered, "; ")
+        end
+    end
+
+    local body, http_status, http_err = https_get(
+        "www.tiktok.com", "/@" .. clean, timeout, cookie_val, user_agent,
+        "text/html,application/xhtml+xml")
+    if http_err then return nil, http_err end
+
+    if not body or body == "" then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "empty HTML response")
+    end
+
+    -- Extract SIGI JSON from <script> tag
+    local marker_pos = body:find(SIGI_MARKER, 1, true)
+    if not marker_pos then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "SIGI script tag not found")
+    end
+
+    local gt_pos = body:find(">", marker_pos, true)
+    if not gt_pos then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "no > after SIGI marker")
+    end
+
+    local json_start = gt_pos + 1
+    local script_end = body:find("</script>", json_start, true)
+    if not script_end then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "no </script> after SIGI JSON")
+    end
+
+    local json_str = body:sub(json_start, script_end - 1)
+    if json_str == "" then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "empty SIGI JSON blob")
+    end
+
+    local ok_json, blob = pcall(json_decode, json_str)
+    if not ok_json then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "JSON parse failed")
+    end
+
+    local scope = blob and blob.__DEFAULT_SCOPE__
+    if not scope then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "missing __DEFAULT_SCOPE__")
+    end
+
+    local detail = scope["webapp.user-detail"]
+    if not detail then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "missing webapp.user-detail")
+    end
+
+    local status_code = detail.statusCode or 0
+    if status_code == 10222 then
+        return nil, errors.new(errors.PROFILE_PRIVATE, clean)
+    elseif status_code == 10221 or status_code == 10223 then
+        return nil, errors.new(errors.PROFILE_NOT_FOUND, clean)
+    elseif status_code ~= 0 then
+        return nil, errors.new(errors.PROFILE_ERROR,
+            "statusCode=" .. tostring(status_code))
+    end
+
+    local user_info = detail.userInfo
+    if not user_info or not user_info.user then
+        return nil, errors.new(errors.PROFILE_SCRAPE, "missing userInfo.user")
+    end
+
+    local user = user_info.user
+    local stats = user_info.stats or {}
+
+    local bio_link = nil
+    if user.bioLink and user.bioLink.link and user.bioLink.link ~= "" then
+        bio_link = user.bioLink.link
+    end
+
+    return {
+        user_id = tostring(user.id or ""),
+        unique_id = user.uniqueId or "",
+        nickname = user.nickname or "",
+        bio = user.signature or "",
+        avatar_thumb = user.avatarThumb or "",
+        avatar_medium = user.avatarMedium or "",
+        avatar_large = user.avatarLarger or "",
+        verified = user.verified == true,
+        private_account = user.privateAccount == true,
+        is_organization = (user.isOrganization or 0) ~= 0,
+        room_id = user.roomId or "",
+        bio_link = bio_link,
+        follower_count = stats.followerCount or 0,
+        following_count = stats.followingCount or 0,
+        heart_count = stats.heartCount or 0,
+        video_count = stats.videoCount or 0,
+        friend_count = stats.friendCount or 0,
+    }, nil
 end
 
 return M
