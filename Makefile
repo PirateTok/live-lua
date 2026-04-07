@@ -1,6 +1,6 @@
 .PHONY: deps discipline check test examples clean
 
-LUA ?= luajit
+LUA ?= lua
 
 deps:
 	luarocks install lua-protobuf
@@ -13,6 +13,9 @@ discipline:
 	$(LUA) discipline/scanner.lua .
 
 check: discipline
+
+test:
+	$(LUA) tests/replay_test.lua
 
 test-online:
 	@echo "--- online_check: offline user ---"

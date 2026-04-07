@@ -203,6 +203,17 @@ luajit examples/stream_info.lua <username>      # fetch room metadata + stream U
 
 See `examples/love2d/` for Love2D game engine integration.
 
+## Replay testing
+
+Deterministic cross-lib validation against binary WSS captures. Requires testdata from a separate repo:
+
+```bash
+git clone https://github.com/PirateTok/live-testdata ../live-testdata
+make test
+```
+
+Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
+
 ## Known gaps
 
 - Explicit `DEVICE_BLOCKED` handshake handling not implemented yet.
