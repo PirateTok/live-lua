@@ -26,17 +26,47 @@ end
 ---@param user_agent string|nil override UA (default: random from pool)
 ---@return string|nil ttwid value
 ---@return table|nil error
-function M.fetch_ttwid(timeout, user_agent)
+function M.fetch_ttwid(timeout, user_agent, proxy)
     timeout = timeout or 10
     local active_ua = user_agent or ua.random_ua()
 
     local tcp = socket.tcp()
     tcp:settimeout(timeout)
 
-    local ok, conn_err = tcp:connect(TIKTOK_HOST, 443)
-    if not ok then
-        return nil, errors.new(errors.HTTP_ERROR,
-            "connect to tiktok.com failed: " .. tostring(conn_err))
+    if proxy and proxy ~= "" then
+        local phost, pport = proxy:match("^https?://([^:/]+):?(%d*)/?$")
+        if not phost then
+            return nil, errors.new(errors.HTTP_ERROR,
+                "invalid proxy URL: " .. tostring(proxy))
+        end
+        pport = tonumber(pport) or 8080
+
+        local ok, conn_err = tcp:connect(phost, pport)
+        if not ok then
+            return nil, errors.new(errors.HTTP_ERROR,
+                "proxy connect failed: " .. tostring(conn_err))
+        end
+
+        local connect_req = "CONNECT " .. TIKTOK_HOST .. ":443 HTTP/1.1\r\n"
+            .. "Host: " .. TIKTOK_HOST .. ":443\r\n\r\n"
+        tcp:send(connect_req)
+
+        local status_line = tcp:receive("*l")
+        if not status_line or not status_line:match("^HTTP/1%.. 200") then
+            tcp:close()
+            return nil, errors.new(errors.HTTP_ERROR,
+                "proxy CONNECT failed: " .. tostring(status_line))
+        end
+        while true do
+            local line = tcp:receive("*l")
+            if not line or line == "" then break end
+        end
+    else
+        local ok, conn_err = tcp:connect(TIKTOK_HOST, 443)
+        if not ok then
+            return nil, errors.new(errors.HTTP_ERROR,
+                "connect to tiktok.com failed: " .. tostring(conn_err))
+        end
     end
 
     local params = {

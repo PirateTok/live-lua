@@ -16,14 +16,46 @@ local M = {}
 ---@return string|nil body
 ---@return number|nil http status code
 ---@return table|nil error
-local function https_get(host, path, timeout, cookies, user_agent, accept)
+local function https_get(host, path, timeout, cookies, user_agent, accept, proxy)
     local tcp = socket.tcp()
     tcp:settimeout(timeout)
 
-    local ok, conn_err = tcp:connect(host, 443)
-    if not ok then
-        return nil, nil, errors.new(errors.HTTP_ERROR,
-            "connect failed: " .. tostring(conn_err))
+    if proxy and proxy ~= "" then
+        -- HTTP CONNECT tunneling through proxy
+        local phost, pport = proxy:match("^https?://([^:/]+):?(%d*)/?$")
+        if not phost then
+            return nil, nil, errors.new(errors.HTTP_ERROR,
+                "invalid proxy URL: " .. proxy)
+        end
+        pport = tonumber(pport) or 8080
+
+        local ok, conn_err = tcp:connect(phost, pport)
+        if not ok then
+            return nil, nil, errors.new(errors.HTTP_ERROR,
+                "proxy connect failed: " .. tostring(conn_err))
+        end
+
+        local connect_req = "CONNECT " .. host .. ":443 HTTP/1.1\r\n"
+            .. "Host: " .. host .. ":443\r\n\r\n"
+        tcp:send(connect_req)
+
+        local status_line = tcp:receive("*l")
+        if not status_line or not status_line:match("^HTTP/1%.. 200") then
+            tcp:close()
+            return nil, nil, errors.new(errors.HTTP_ERROR,
+                "proxy CONNECT failed: " .. tostring(status_line))
+        end
+        -- drain remaining proxy response headers
+        while true do
+            local line = tcp:receive("*l")
+            if not line or line == "" then break end
+        end
+    else
+        local ok, conn_err = tcp:connect(host, 443)
+        if not ok then
+            return nil, nil, errors.new(errors.HTTP_ERROR,
+                "connect failed: " .. tostring(conn_err))
+        end
     end
 
     local params = {
@@ -340,7 +372,7 @@ local SIGI_MARKER = 'id="__UNIVERSAL_DATA_FOR_REHYDRATION__"'
 ---@param cookies string|nil extra cookies (sessionid, sid_tt)
 ---@return table|nil profile table
 ---@return table|nil error
-function M.scrape_profile(username, ttwid, timeout, user_agent, cookies)
+function M.scrape_profile(username, ttwid, timeout, user_agent, cookies, proxy)
     timeout = timeout or 15
     local clean = username:gsub("^@", ""):match("^%s*(.-)%s*$"):lower()
 
@@ -361,7 +393,7 @@ function M.scrape_profile(username, ttwid, timeout, user_agent, cookies)
 
     local body, http_status, http_err = https_get(
         "www.tiktok.com", "/@" .. clean, timeout, cookie_val, user_agent,
-        "text/html,application/xhtml+xml")
+        "text/html,application/xhtml+xml", proxy)
     if http_err then return nil, http_err end
 
     if not body or body == "" then
@@ -407,12 +439,12 @@ function M.scrape_profile(username, ttwid, timeout, user_agent, cookies)
 
     local status_code = detail.statusCode or 0
     if status_code == 10222 then
-        return nil, errors.new(errors.PROFILE_PRIVATE, clean)
+        return nil, errors.new(errors.PROFILE_PRIVATE, "profile is private: @" .. clean)
     elseif status_code == 10221 or status_code == 10223 then
-        return nil, errors.new(errors.PROFILE_NOT_FOUND, clean)
+        return nil, errors.new(errors.PROFILE_NOT_FOUND, "profile not found: @" .. clean)
     elseif status_code ~= 0 then
         return nil, errors.new(errors.PROFILE_ERROR,
-            "statusCode=" .. tostring(status_code))
+            "profile fetch error: statusCode=" .. tostring(status_code))
     end
 
     local user_info = detail.userInfo

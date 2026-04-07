@@ -29,7 +29,7 @@ local M = {}
 ---@return table builder
 function M.builder(username)
     local b = setmetatable({
-        _username = username:gsub("^@", ""):match("^%s*(.-)%s*$"),
+        _username = username:match("^%s*(.-)%s*$"):gsub("^@", ""),
         _cdn = "global",
         _timeout = 10,
         _heartbeat_interval = 10,
@@ -317,5 +317,8 @@ M.check_online = http.check_online
 M.fetch_room_info = http.fetch_room_info
 M.errors = errors
 M.events = events_mod
+M.ProfileCache = require "piratetok.helpers.profile_cache"
+M.GiftStreakTracker = require "piratetok.helpers.gift_streak"
+M.LikeAccumulator = require "piratetok.helpers.like_accumulator"
 
 return M

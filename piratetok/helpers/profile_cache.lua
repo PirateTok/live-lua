@@ -21,6 +21,7 @@ function ProfileCache.new(opts)
         _entries = {},
         _ttwid = nil,
         _ttl = opts.ttl or DEFAULT_TTL,
+        _proxy = opts.proxy,
         _user_agent = opts.user_agent,
         _cookies = opts.cookies,
     }, ProfileCache)
@@ -45,7 +46,7 @@ function ProfileCache:fetch(username)
     if not ttwid then return nil, ttwid_err end
 
     local profile, scrape_err = http.scrape_profile(
-        key, ttwid, SCRAPE_TIMEOUT, self._user_agent, self._cookies)
+        key, ttwid, SCRAPE_TIMEOUT, self._user_agent, self._cookies, self._proxy)
 
     if scrape_err then
         if is_negative_cacheable(scrape_err) then
@@ -83,17 +84,18 @@ end
 
 function ProfileCache:_ensure_ttwid()
     if self._ttwid then return self._ttwid, nil end
-    local ttwid, err = auth.fetch_ttwid(TTWID_TIMEOUT, self._user_agent)
+    local ttwid, err = auth.fetch_ttwid(TTWID_TIMEOUT, self._user_agent, self._proxy)
     if not ttwid then return nil, err end
     self._ttwid = ttwid
     return ttwid, nil
 end
 
-function normalize_key(username)
-    return username:gsub("^@", ""):match("^%s*(.-)%s*$"):lower()
+local function normalize_key(username)
+    local trimmed = username:match("^%s*(.-)%s*$")
+    return trimmed:gsub("^@", ""):lower()
 end
 
-function is_negative_cacheable(err)
+local function is_negative_cacheable(err)
     return err.type == errors.PROFILE_PRIVATE
         or err.type == errors.PROFILE_NOT_FOUND
         or err.type == errors.PROFILE_ERROR
