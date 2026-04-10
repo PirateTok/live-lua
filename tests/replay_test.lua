@@ -151,19 +151,21 @@ local function file_exists(path)
     return false
 end
 
-local function find_paths(name)
+local function find_paths(name, capture_suffix)
+    local cap_name = name .. (capture_suffix or "") .. ".bin"
+    local man_name = name .. ".json"
     -- 1. $PIRATETOK_TESTDATA
     local env = os.getenv("PIRATETOK_TESTDATA")
     if env and env ~= "" then
-        local cap = env .. "/captures/" .. name .. ".bin"
-        local man = env .. "/manifests/" .. name .. ".json"
+        local cap = env .. "/captures/" .. cap_name
+        local man = env .. "/manifests/" .. man_name
         if file_exists(cap) and file_exists(man) then
             return cap, man
         end
     end
     -- 2. testdata/ in repo root
-    local cap2 = "testdata/captures/" .. name .. ".bin"
-    local man2 = "testdata/manifests/" .. name .. ".json"
+    local cap2 = "testdata/captures/" .. cap_name
+    local man2 = "testdata/manifests/" .. man_name
     if file_exists(cap2) and file_exists(man2) then
         return cap2, man2
     end
@@ -505,21 +507,67 @@ local function run_capture_test(name)
     end
 end
 
--- ---- main ----
-
 local captures = {
     "calvinterest6",
     "happyhappygaltv",
     "fox4newsdallasfortworth",
 }
 
+local function run_raw_capture_test(name)
+    local cap_path, man_path = find_paths(name, "_raw")
+    if not cap_path then
+        io.write(string.format(
+            "SKIP %s_raw: no testdata (set PIRATETOK_TESTDATA or clone "
+            .. "live-testdata)\n", name))
+        return "skip"
+    end
+
+    local display = name .. "_raw"
+    io.write(string.format("RUN  %s ... ", display))
+    io.flush()
+
+    local man_f = io.open(man_path, "r")
+    local man_json = man_f:read("*a")
+    man_f:close()
+    local manifest = cjson.decode(man_json)
+
+    local frames = read_capture(cap_path)
+    local result = replay(frames)
+
+    local prev_failed = test_failed
+    assert_replay(display, result, manifest)
+
+    if test_failed and not prev_failed then
+        io.write("FAIL\n")
+        return "fail"
+    elseif test_failed then
+        io.write("FAIL\n")
+        return "fail"
+    else
+        io.write(string.format("OK (%d assertions)\n", assertion_count))
+        return "pass"
+    end
+end
+
+-- ---- main ----
+
 local pass, fail, skip = 0, 0, 0
 
-io.write("\n--- replay tests ---\n\n")
+io.write("\n--- replay tests (compressed) ---\n\n")
 
 for _, name in ipairs(captures) do
     assertion_count = 0
     local result = run_capture_test(name)
+    if result == "pass" then pass = pass + 1
+    elseif result == "fail" then fail = fail + 1
+    else skip = skip + 1 end
+end
+
+io.write("\n--- replay tests (raw/uncompressed) ---\n\n")
+
+for _, name in ipairs(captures) do
+    assertion_count = 0
+    local result = run_raw_capture_test(name)
     if result == "pass" then pass = pass + 1
     elseif result == "fail" then fail = fail + 1
     else skip = skip + 1 end

@@ -16,12 +16,15 @@ M.CDN_HOSTS = {
 ---@param room_id string
 ---@param lang_override string|nil override system language (e.g. "en")
 ---@param region_override string|nil override system region (e.g. "US")
+---@param use_compress boolean|nil whether to request gzip compression (default true)
 ---@return string
-function M.build_ws_url(cdn_host, room_id, lang_override, region_override)
+function M.build_ws_url(cdn_host, room_id, lang_override, region_override, use_compress)
     local last_rtt = string.format("%.3f", 100 + math.random() * 100)
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
     local ws_lang = lang_override or ua.system_language()
     local ws_region = region_override or ua.system_region()
+    if use_compress == nil then use_compress = true end
+    local compress_val = use_compress and "gzip" or ""
     local params = {
         "version_code=180800",
         "device_platform=web",
@@ -37,7 +40,7 @@ function M.build_ws_url(cdn_host, room_id, lang_override, region_override)
         "app_name=tiktok_web",
         "sup_ws_ds_opt=1",
         "update_version_code=2.0.0",
-        "compress=gzip",
+        "compress=" .. compress_val,
         "webcast_language=" .. ws_lang,
         "ws_direct=1",
         "aid=1988",

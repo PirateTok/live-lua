@@ -4,7 +4,7 @@
 
 # piratetok-live-lua
 
-Connect to any TikTok Live stream and receive real-time events in Lua — chat, gifts, likes, joins, viewer counts, and 64 decoded event types. Poll-based API for game engine integration. No signing server, no API keys, no authentication required.
+Connect to any TikTok Live stream and receive real-time events in Lua — chat, gifts, likes, joins, viewer counts, and 65 decoded event types. Poll-based API for game engine integration. No signing server, no API keys, no authentication required.
 
 ```lua
 local PirateTok = require "piratetok"
@@ -22,14 +22,14 @@ end)
 
 client:on("gift", function(msg)
     local name = msg.user and msg.user.nickname or "?"
-    local gift = msg.gift and msg.gift.name or "gift"
+    local gift = msg.gift_details and msg.gift_details.name or "gift"
     local diamonds = PirateTok.events.diamond_total(msg)
     print("[gift] " .. name .. " sent " .. gift .. " (" .. diamonds .. " diamonds)")
 end)
 
 client:on("like", function(msg)
     local name = msg.user and msg.user.nickname or "?"
-    print("[like] " .. name .. " (" .. (msg.total_likes or 0) .. " total)")
+    print("[like] " .. name .. " (" .. (msg.total or 0) .. " total)")
 end)
 
 -- Blocks until disconnected — heartbeat and reconnection handled internally
@@ -38,17 +38,21 @@ client:run()
 
 ## Install
 
-Requires LuaJIT and luarocks:
-
 ```bash
-luarocks --lua-version=5.1 install luasocket
-luarocks --lua-version=5.1 install luasec
-luarocks --lua-version=5.1 install lua-protobuf
-luarocks --lua-version=5.1 install lua-zlib
-luarocks --lua-version=5.1 install lua-cjson
+luarocks install piratetok-live-lua
 ```
 
-Copy the `piratetok/` directory into your project.
+Or install dependencies manually and copy the source:
+
+```bash
+luarocks install luasocket
+luarocks install luasec
+luarocks install lua-protobuf
+luarocks install lua-zlib
+luarocks install lua-cjson
+```
+
+Then copy the `piratetok/` directory into your project.
 
 ## Other languages
 
@@ -95,7 +99,7 @@ end
 ## Features
 
 - **Zero signing dependency** — no API keys, no signing server, no external auth
-- **64 decoded event types** — chat, gifts, likes, joins, follows, shares, battles, polls, envelopes, and more
+- **65 decoded event types** — chat, gifts, likes, joins, follows, shares, battles, polls, envelopes, and more
 - **Poll-based API** — `client:poll()` for game loops, `client:run()` for standalone scripts
 - **Auto-reconnection** — stale detection, exponential backoff, self-healing auth
 - **Enriched User data** — badges, gifter level, moderator status, follow info, fan club
@@ -111,7 +115,12 @@ local client = PirateTok.builder("username_here")
     :heartbeat_interval(10)     -- seconds between heartbeats (default 10)
     :stale_timeout(90)          -- reconnect after N seconds of silence (default 60)
     :max_retries(10)            -- reconnect attempts (default 5)
-    :proxy("socks5://host:port") -- proxy URL (HTTP/HTTPS/SOCKS5)
+    :proxy("http://host:port")   -- HTTP/HTTPS proxy URL (CONNECT tunnel)
+    :compress(false)            -- disable gzip compression for WSS payloads (default true)
+    :user_agent("Mozilla/...")  -- override random UA rotation with a fixed user-agent
+    :cookies("sessionid=xxx; sid_tt=xxx") -- session cookies for 18+ room info
+    :language("en")             -- override detected system language (two-letter code)
+    :region("US")               -- override detected system region (two-letter code)
     :build()
 ```
 
@@ -133,7 +142,7 @@ local client = PirateTok.builder("username_here")
 | `error` | error table (use `PirateTok.errors.format(err)`) |
 | `unknown` | `.method`, `.payload` (raw bytes for unhandled types) |
 
-Plus 50+ more decoded types: `emote_chat`, `poll`, `envelope`, `rank_update`, `link_mic_battle`, etc.
+Plus 58 more decoded types: `emote_chat`, `poll`, `envelope`, `rank_update`, `link_mic_battle`, etc.
 
 ## Online check (standalone)
 
@@ -185,20 +194,22 @@ All protobuf schemas are defined inline via `lua-protobuf` — no `.proto` files
 
 ## Runtime compatibility
 
-Requires **LuaJIT** with unrestricted system access (raw TCP sockets, FFI). Works in:
+Requires **Lua 5.1+** (including LuaJIT) with unrestricted system access (raw TCP sockets). Works in:
 
 - **Love2D** — poll-based API designed for game loops
 - **Defold** — with native extension packaging for C deps
-- **Standalone LuaJIT** — scripts, bots, monitoring tools
+- **Standalone LuaJIT / Lua** — scripts, bots, monitoring tools
 
 Does **not** work in sandboxed Lua environments (Roblox, Neovim, FiveM, OpenResty) — these restrict socket access and/or use incompatible Lua variants.
 
 ## Examples
 
 ```bash
-luajit examples/basic_chat.lua <username>       # connect + print chat events
-luajit examples/online_check.lua <username>     # check if user is live
-luajit examples/stream_info.lua <username>      # fetch room metadata + stream URLs
+luajit examples/basic_chat.lua <username>        # connect + print chat events
+luajit examples/online_check.lua <username>      # check if user is live
+luajit examples/stream_info.lua <username>       # fetch room metadata + stream URLs
+luajit examples/gift_streak.lua <username>       # gift streak tracking with diamond totals
+luajit examples/profile_lookup.lua <username>    # fetch profile metadata + avatars (cached)
 ```
 
 See `examples/love2d/` for Love2D game engine integration.
@@ -213,11 +224,6 @@ make test
 ```
 
 Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
-
-## Known gaps
-
-- Explicit `DEVICE_BLOCKED` handshake handling not implemented yet.
-- `.proxy()` exists on the builder, but proxy transport is not wired into WebSocket/HTTP yet.
 
 ## License
 

@@ -35,6 +35,7 @@ function M.builder(username)
         _heartbeat_interval = 10,
         _stale_timeout = 60,
         _max_retries = 5,
+        _compress = true,
         _proxy = nil,
         _user_agent = nil,
         _cookies = nil,
@@ -48,6 +49,7 @@ function Builder:heartbeat_interval(s) self._heartbeat_interval = s; return self
 function Builder:stale_timeout(s) self._stale_timeout = s; return self end
 function Builder:max_retries(n) self._max_retries = n; return self end
 function Builder:proxy(u) self._proxy = u; return self end
+function Builder:compress(b) self._compress = b; return self end
 
 --- Override the detected system language (e.g. "en", "ro", "pt").
 -- Used in API and WSS URL parameters (app_language, webcast_language, etc.).
@@ -86,6 +88,7 @@ function Builder:build()
         heartbeat_interval = self._heartbeat_interval,
         stale_timeout = self._stale_timeout,
         max_retries = self._max_retries,
+        compress = self._compress,
         proxy = self._proxy,
         user_agent = self._user_agent,
         cookies = self._cookies,
@@ -169,7 +172,8 @@ function Client:_connect_ws()
     end
 
     local ws_url = url_mod.build_ws_url(
-        self.cdn_host, self._room_id, self.language, self.region)
+        self.cdn_host, self._room_id, self.language, self.region,
+        self.compress)
     local conn, ws_err = ws.connect(
         ws_url, { Cookie = cookie_val }, active_ua, self.proxy)
     if not conn then return ws_err end
