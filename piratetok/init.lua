@@ -119,7 +119,7 @@ function Client:connect()
     self._attempt = 0
 
     local result, room_err = http.fetch_room_id(
-        self.username, self.timeout, self.user_agent)
+        self.username, self.timeout, self.user_agent, self.proxy)
     if not result then
         self._state = "disconnected"
         self:_emit("error", room_err)
@@ -144,7 +144,7 @@ function Client:_connect_ws()
     -- Pick UA: user override or random from pool
     local active_ua = self.user_agent or ua_mod.random_ua()
 
-    local ttwid, ttwid_err = auth.fetch_ttwid(self.timeout, active_ua)
+    local ttwid, ttwid_err = auth.fetch_ttwid(self.timeout, active_ua, self.proxy)
     if not ttwid then return ttwid_err end
 
     -- Build cookie header: ttwid always present, user cookies appended if set

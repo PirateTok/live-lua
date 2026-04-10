@@ -9,6 +9,23 @@ local DEFAULT_TTL = 300 -- 5 minutes
 local TTWID_TIMEOUT = 10
 local SCRAPE_TIMEOUT = 15
 
+--- Normalize a username key (trim, strip @, lowercase).
+---@param username string
+---@return string
+local function normalize_key(username)
+    local trimmed = username:match("^%s*(.-)%s*$")
+    return trimmed:gsub("^@", ""):lower()
+end
+
+--- Check if an error type should be negatively cached.
+---@param err table
+---@return boolean
+local function is_negative_cacheable(err)
+    return err.type == errors.PROFILE_PRIVATE
+        or err.type == errors.PROFILE_NOT_FOUND
+        or err.type == errors.PROFILE_ERROR
+end
+
 local ProfileCache = {}
 ProfileCache.__index = ProfileCache
 
@@ -88,17 +105,6 @@ function ProfileCache:_ensure_ttwid()
     if not ttwid then return nil, err end
     self._ttwid = ttwid
     return ttwid, nil
-end
-
-local function normalize_key(username)
-    local trimmed = username:match("^%s*(.-)%s*$")
-    return trimmed:gsub("^@", ""):lower()
-end
-
-local function is_negative_cacheable(err)
-    return err.type == errors.PROFILE_PRIVATE
-        or err.type == errors.PROFILE_NOT_FOUND
-        or err.type == errors.PROFILE_ERROR
 end
 
 return ProfileCache

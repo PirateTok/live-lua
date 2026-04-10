@@ -7,6 +7,25 @@ local ua = require "piratetok.ua"
 
 local M = {}
 
+--- Read chunked transfer-encoding body.
+---@param conn userdata
+---@return string body
+local function read_chunked(conn)
+    local parts = {}
+    while true do
+        local size_line = conn:receive("*l")
+        if not size_line then break end
+        local chunk_size = tonumber(size_line, 16)
+        if not chunk_size or chunk_size == 0 then break end
+        local chunk = conn:receive(chunk_size)
+        if chunk then
+            parts[#parts + 1] = chunk
+        end
+        conn:receive("*l") -- trailing \r\n
+    end
+    return table.concat(parts)
+end
+
 --- Minimal HTTPS GET — returns response body or nil+error.
 ---@param host string
 ---@param path string
@@ -144,25 +163,6 @@ local function https_get(host, path, timeout, cookies, user_agent, accept, proxy
     return body, http_status, nil
 end
 
---- Read chunked transfer-encoding body.
----@param conn userdata
----@return string body
-function read_chunked(conn)
-    local parts = {}
-    while true do
-        local size_line = conn:receive("*l")
-        if not size_line then break end
-        local chunk_size = tonumber(size_line, 16)
-        if not chunk_size or chunk_size == 0 then break end
-        local chunk = conn:receive(chunk_size)
-        if chunk then
-            parts[#parts + 1] = chunk
-        end
-        conn:receive("*l") -- trailing \r\n
-    end
-    return table.concat(parts)
-end
-
 --- Try to load a JSON library (cjson preferred, dkjson fallback).
 local json_decode
 do
@@ -183,20 +183,24 @@ end
 ---@param username string TikTok username (with or without @)
 ---@param timeout number request timeout in seconds (default 10)
 ---@param user_agent string|nil override UA (default: random from pool)
+---@param proxy string|nil HTTP proxy URL
 ---@return table|nil result with room_id field
 ---@return table|nil error
-function M.fetch_room_id(username, timeout, user_agent)
+function M.fetch_room_id(username, timeout, user_agent, proxy)
     timeout = timeout or 10
     local clean = username:gsub("^@", ""):match("^%s*(.-)%s*$")
 
+    local lang = ua.system_language()
+    local region = ua.system_region()
     local path = "/api-live/user/room?aid=1988&app_name=tiktok_web"
-        .. "&device_platform=web_pc&app_language=en&browser_language=en-US"
-        .. "&region=RO&user_is_login=false"
+        .. "&device_platform=web_pc&app_language=" .. lang
+        .. "&browser_language=" .. lang .. "-" .. region
+        .. "&region=" .. region .. "&user_is_login=false"
         .. "&uniqueId=" .. clean
         .. "&sourceType=54&staleTime=600000"
 
     local body, http_status, http_err = https_get(
-        "www.tiktok.com", path, timeout, nil, user_agent)
+        "www.tiktok.com", path, timeout, nil, user_agent, nil, proxy)
     if http_err then
         return nil, http_err
     end
@@ -253,6 +257,40 @@ function M.fetch_room_id(username, timeout, user_agent)
     return { room_id = room_id }, nil
 end
 
+--- Parse nested stream URL JSON.
+---@param room_data table
+---@return table|nil
+local function parse_stream_urls(room_data)
+    local su = room_data.stream_url
+    if not su then return nil end
+    local sdk = su.live_core_sdk_data
+    if not sdk then return nil end
+    local pull = sdk.pull_data
+    if not pull then return nil end
+    local stream_str = pull.stream_data
+    if not stream_str or stream_str == "" then return nil end
+
+    local ok, nested = pcall(json_decode, stream_str)
+    if not ok or not nested or not nested.data then return nil end
+
+    local nd = nested.data
+    local function get_flv(quality)
+        local q = nd[quality]
+        if q and q.main and q.main.flv then
+            return q.main.flv
+        end
+        return nil
+    end
+
+    return {
+        flv_origin = get_flv("origin"),
+        flv_hd = get_flv("hd") or get_flv("uhd"),
+        flv_sd = get_flv("sd"),
+        flv_ld = get_flv("ld"),
+        flv_ao = get_flv("ao"),
+    }
+end
+
 --- Fetch detailed room info (title, viewers, stream URLs).
 -- Optional call — not needed for WSS event streaming.
 -- For 18+ rooms, pass session cookies ("sessionid=xxx; sid_tt=xxx").
@@ -266,12 +304,15 @@ function M.fetch_room_info(room_id, timeout, cookies, user_agent)
     timeout = timeout or 10
 
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
+    local ri_lang = ua.system_language()
+    local ri_region = ua.system_region()
     local path = "/webcast/room/info/?aid=1988&app_name=tiktok_web"
-        .. "&device_platform=web_pc&app_language=en&browser_language=en-US"
+        .. "&device_platform=web_pc&app_language=" .. ri_lang
+        .. "&browser_language=" .. ri_lang .. "-" .. ri_region
         .. "&browser_name=Mozilla&browser_online=true&browser_platform=Win32"
         .. "&cookie_enabled=true&focus_state=true&from_page=user"
         .. "&screen_height=1080&screen_width=1920"
-        .. "&tz_name=" .. tz_name .. "&webcast_language=en"
+        .. "&tz_name=" .. tz_name .. "&webcast_language=" .. ri_lang
         .. "&room_id=" .. room_id
 
     local body, http_status, http_err = https_get(
@@ -317,48 +358,15 @@ function M.fetch_room_info(room_id, timeout, cookies, user_agent)
     return info, nil
 end
 
---- Parse nested stream URL JSON.
----@param room_data table
----@return table|nil
-function parse_stream_urls(room_data)
-    local su = room_data.stream_url
-    if not su then return nil end
-    local sdk = su.live_core_sdk_data
-    if not sdk then return nil end
-    local pull = sdk.pull_data
-    if not pull then return nil end
-    local stream_str = pull.stream_data
-    if not stream_str or stream_str == "" then return nil end
-
-    local ok, nested = pcall(json_decode, stream_str)
-    if not ok or not nested or not nested.data then return nil end
-
-    local nd = nested.data
-    local function get_flv(quality)
-        local q = nd[quality]
-        if q and q.main and q.main.flv then
-            return q.main.flv
-        end
-        return nil
-    end
-
-    return {
-        flv_origin = get_flv("origin"),
-        flv_hd = get_flv("hd") or get_flv("uhd"),
-        flv_sd = get_flv("sd"),
-        flv_ld = get_flv("ld"),
-        flv_ao = get_flv("ao"),
-    }
-end
-
 --- Check if a user is online (standalone, doesn't connect).
 ---@param username string
 ---@param timeout number seconds (default 10)
 ---@param user_agent string|nil override UA (default: random from pool)
+---@param proxy string|nil HTTP proxy URL
 ---@return table|nil result with room_id and status fields
 ---@return table|nil error
-function M.check_online(username, timeout, user_agent)
-    return M.fetch_room_id(username, timeout, user_agent)
+function M.check_online(username, timeout, user_agent, proxy)
+    return M.fetch_room_id(username, timeout, user_agent, proxy)
 end
 
 local SIGI_MARKER = 'id="__UNIVERSAL_DATA_FOR_REHYDRATION__"'

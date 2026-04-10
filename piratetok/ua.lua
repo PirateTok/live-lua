@@ -80,6 +80,27 @@ function M.system_timezone()
     return "UTC"
 end
 
+--- Parse POSIX locale string (e.g. "ro_RO.UTF-8") into (lang, region).
+---@param s string
+---@return string|nil language
+---@return string|nil region
+local function parse_posix_locale(s)
+    -- strip encoding: "en_US.UTF-8" -> "en_US"
+    local base = s:match("^([^%.]+)")
+    if not base or base == "" then return nil, nil end
+    -- split on _ or -
+    local lang, region = base:match("^(%a%a+)[_%-](%a+)")
+    if lang then
+        return lang:lower(), region:upper()
+    end
+    -- no region part
+    lang = base:match("^(%a%a+)")
+    if lang then
+        return lang:lower(), "US"
+    end
+    return nil, nil
+end
+
 --- Detect system locale as (language, region).
 -- Parses LC_ALL then LANG env vars. Falls back to ("en", "US").
 ---@return string language (lowercase, e.g. "ro")
@@ -107,27 +128,6 @@ end
 function M.system_region()
     local _, region = M.system_locale()
     return region
-end
-
---- Parse POSIX locale string (e.g. "ro_RO.UTF-8") into (lang, region).
----@param s string
----@return string|nil language
----@return string|nil region
-function parse_posix_locale(s)
-    -- strip encoding: "en_US.UTF-8" -> "en_US"
-    local base = s:match("^([^%.]+)")
-    if not base or base == "" then return nil, nil end
-    -- split on _ or -
-    local lang, region = base:match("^(%a%a+)[_%-](%a+)")
-    if lang then
-        return lang:lower(), region:upper()
-    end
-    -- no region part
-    lang = base:match("^(%a%a+)")
-    if lang then
-        return lang:lower(), "US"
-    end
-    return nil, nil
 end
 
 return M
