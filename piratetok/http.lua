@@ -380,10 +380,10 @@ function M.scrape_profile(username, ttwid, timeout, user_agent, cookies, proxy)
     if cookies and cookies ~= "" then
         -- strip user-provided ttwid so the managed one wins
         local filtered = {}
-        for pair in cookies:gmatch("[^;]+") do
-            pair = pair:match("^%s*(.-)%s*$")
-            if not pair:match("^ttwid=") then
-                filtered[#filtered + 1] = pair
+        for raw_pair in cookies:gmatch("[^;]+") do
+            local trimmed = raw_pair:match("^%s*(.-)%s*$")
+            if not trimmed:match("^ttwid=") then
+                filtered[#filtered + 1] = trimmed
             end
         end
         if #filtered > 0 then
