@@ -184,14 +184,17 @@ end
 ---@param timeout number request timeout in seconds (default 10)
 ---@param user_agent string|nil override UA (default: random from pool)
 ---@param proxy string|nil HTTP proxy URL
+---@param lang_override string|nil override system language (e.g. "en")
+---@param region_override string|nil override system region (e.g. "US")
 ---@return table|nil result with room_id field
 ---@return table|nil error
-function M.fetch_room_id(username, timeout, user_agent, proxy)
+function M.fetch_room_id(username, timeout, user_agent, proxy,
+                         lang_override, region_override)
     timeout = timeout or 10
     local clean = username:gsub("^@", ""):match("^%s*(.-)%s*$")
 
-    local lang = ua.system_language()
-    local region = ua.system_region()
+    local lang = lang_override or ua.system_language()
+    local region = region_override or ua.system_region()
     local path = "/api-live/user/room?aid=1988&app_name=tiktok_web"
         .. "&device_platform=web_pc&app_language=" .. lang
         .. "&browser_language=" .. lang .. "-" .. region
@@ -298,14 +301,17 @@ end
 ---@param timeout number seconds (default 10)
 ---@param cookies string|nil session cookies for 18+ rooms
 ---@param user_agent string|nil override UA (default: random from pool)
+---@param lang_override string|nil override system language (e.g. "en")
+---@param region_override string|nil override system region (e.g. "US")
 ---@return table|nil room info
 ---@return table|nil error
-function M.fetch_room_info(room_id, timeout, cookies, user_agent)
+function M.fetch_room_info(room_id, timeout, cookies, user_agent,
+                           lang_override, region_override)
     timeout = timeout or 10
 
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
-    local ri_lang = ua.system_language()
-    local ri_region = ua.system_region()
+    local ri_lang = lang_override or ua.system_language()
+    local ri_region = region_override or ua.system_region()
     local path = "/webcast/room/info/?aid=1988&app_name=tiktok_web"
         .. "&device_platform=web_pc&app_language=" .. ri_lang
         .. "&browser_language=" .. ri_lang .. "-" .. ri_region

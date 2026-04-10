@@ -14,12 +14,14 @@ M.CDN_HOSTS = {
 --- Build the full WSS URL with all required TikTok params.
 ---@param cdn_host string
 ---@param room_id string
+---@param lang_override string|nil override system language (e.g. "en")
+---@param region_override string|nil override system region (e.g. "US")
 ---@return string
-function M.build_ws_url(cdn_host, room_id)
+function M.build_ws_url(cdn_host, room_id, lang_override, region_override)
     local last_rtt = string.format("%.3f", 100 + math.random() * 100)
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
-    local ws_lang = ua.system_language()
-    local ws_region = ua.system_region()
+    local ws_lang = lang_override or ua.system_language()
+    local ws_region = region_override or ua.system_region()
     local params = {
         "version_code=180800",
         "device_platform=web",

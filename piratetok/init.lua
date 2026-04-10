@@ -49,6 +49,18 @@ function Builder:stale_timeout(s) self._stale_timeout = s; return self end
 function Builder:max_retries(n) self._max_retries = n; return self end
 function Builder:proxy(u) self._proxy = u; return self end
 
+--- Override the detected system language (e.g. "en", "ro", "pt").
+-- Used in API and WSS URL parameters (app_language, webcast_language, etc.).
+---@param lang string two-letter language code
+---@return table self
+function Builder:language(lang) self._language = lang; return self end
+
+--- Override the detected system region (e.g. "US", "RO", "BR").
+-- Used in API and WSS URL parameters (region, browser_language suffix, etc.).
+---@param region string two-letter region code
+---@return table self
+function Builder:region(region) self._region = region; return self end
+
 --- Set a custom user-agent. When set, disables UA rotation — this exact
 -- string is used for all HTTP and WSS requests.
 ---@param agent string user-agent string
@@ -77,6 +89,8 @@ function Builder:build()
         proxy = self._proxy,
         user_agent = self._user_agent,
         cookies = self._cookies,
+        language = self._language,
+        region = self._region,
         _ws = nil,
         _room_id = nil,
         _listeners = {},
@@ -119,7 +133,8 @@ function Client:connect()
     self._attempt = 0
 
     local result, room_err = http.fetch_room_id(
-        self.username, self.timeout, self.user_agent, self.proxy)
+        self.username, self.timeout, self.user_agent, self.proxy,
+        self.language, self.region)
     if not result then
         self._state = "disconnected"
         self:_emit("error", room_err)
@@ -153,9 +168,10 @@ function Client:_connect_ws()
         cookie_val = cookie_val .. "; " .. self.cookies
     end
 
-    local ws_url = url_mod.build_ws_url(self.cdn_host, self._room_id)
+    local ws_url = url_mod.build_ws_url(
+        self.cdn_host, self._room_id, self.language, self.region)
     local conn, ws_err = ws.connect(
-        ws_url, { Cookie = cookie_val }, active_ua)
+        ws_url, { Cookie = cookie_val }, active_ua, self.proxy)
     if not conn then return ws_err end
 
     self._ws = conn
