@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "piratetok-live-lua"
-version = "0.1.5-1"
+version = "0.1.6-1"
 source = {
     url = "git+https://github.com/PirateTok/live-lua.git",
-    tag = "v0.1.5",
+    tag = "v0.1.6",
 }
 description = {
     summary = "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
