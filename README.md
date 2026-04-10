@@ -208,7 +208,7 @@ See `examples/love2d/` for Love2D game engine integration.
 Deterministic cross-lib validation against binary WSS captures. Requires testdata from a separate repo:
 
 ```bash
-git clone https://github.com/PirateTok/live-testdata ../live-testdata
+git clone https://github.com/PirateTok/live-testdata testdata
 make test
 ```
 

@@ -161,23 +161,11 @@ local function find_paths(name)
             return cap, man
         end
     end
-    -- 2. ../live-testdata/
-    local cap2 = "../live-testdata/captures/" .. name .. ".bin"
-    local man2 = "../live-testdata/manifests/" .. name .. ".json"
+    -- 2. testdata/ in repo root
+    local cap2 = "testdata/captures/" .. name .. ".bin"
+    local man2 = "testdata/manifests/" .. name .. ".json"
     if file_exists(cap2) and file_exists(man2) then
         return cap2, man2
-    end
-    -- 3. dev fallback: ../../live-rs/captures/
-    local cap3 = "../../live-rs/captures/" .. name .. ".bin"
-    local man3 = "../../live-rs/captures/manifests/" .. name .. ".json"
-    if file_exists(cap3) and file_exists(man3) then
-        return cap3, man3
-    end
-    -- 4. dev fallback: ../live-rs/captures/
-    local cap4 = "../live-rs/captures/" .. name .. ".bin"
-    local man4 = "../live-rs/captures/manifests/" .. name .. ".json"
-    if file_exists(cap4) and file_exists(man4) then
-        return cap4, man4
     end
     return nil, nil
 end

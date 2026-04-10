@@ -1,3 +1,4 @@
 release.sh
 .env
 *.src.rock
+testdata/
