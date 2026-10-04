@@ -410,5 +410,15 @@ test("proxy: userinfo -> Basic auth; socks rejected", function()
     check(none == nil and err.type == errors.INVALID_URL, "socks rejected")
 end)
 
+test("tls: hostname matching (exact, single-label wildcard)", function()
+    local tls = require "piratetok.tls"
+    check(tls.host_matches("www.tiktok.com", "WWW.TikTok.com"), "exact, case-insensitive")
+    check(tls.host_matches("*.tiktok.com", "webcast.tiktok.com"), "wildcard")
+    check(not tls.host_matches("*.tiktok.com", "a.b.tiktok.com"), "wildcard spans one label")
+    check(not tls.host_matches("*.tiktok.com", "tiktok.com"), "wildcard needs a label")
+    check(not tls.host_matches("*.com", "tiktok.com"), "no bare-TLD wildcard")
+    check(not tls.host_matches("www.tiktok.com", "www.tiktok.com.evil.example"), "suffix trick")
+end)
+
 io.write(string.format("\n--- %d passed, %d failed ---\n", passed, failed))
 if failed > 0 or passed == 0 then os.exit(1) end

@@ -218,6 +218,10 @@ end)
 
 All protobuf schemas are defined inline via `lua-protobuf` — no `.proto` files, no codegen, no build-time dependencies.
 
+## TLS
+
+Every HTTPS / WSS connection verifies the server certificate chain **and** the hostname (subjectAltName). The CA bundle comes from the system trust store: `$SSL_CERT_FILE` / `$SSL_CERT_DIR` if set, otherwise the standard locations on Linux, the BSDs and macOS (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`, `/etc/ssl/cert.pem`, …). **Windows has no file-based store luasec can read — set `SSL_CERT_FILE` to a PEM bundle** (e.g. the one shipped with curl or Git for Windows); without it connections fail with "no CA trust store found". To pin a custom bundle in code: `require("piratetok.tls").ca_file = "/path/ca.pem"`.
+
 ## Runtime compatibility
 
 Requires **Lua 5.1+** (including LuaJIT) with unrestricted system access (raw TCP sockets). Works in:

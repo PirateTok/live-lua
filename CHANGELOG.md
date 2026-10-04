@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- **Security: TLS certificates are verified.** Previously every connection used `verify = "none"` (MITM-able). New `piratetok.tls`: chain verification against the system trust store (`SSL_CERT_FILE` / `SSL_CERT_DIR`, then the standard distro bundle paths) plus subjectAltName hostname matching, which luasec does not do itself. Windows needs `SSL_CERT_FILE`. Override: `require("piratetok.tls").ca_file`.
+- `http.parse_profile()` split out of `scrape_profile()` (pure); `ProfileCache` fetches ttwid with the bounded retry.
+- Tests: TLS valid/invalid pair (unknown CA rejected by default, trusted CA + wrong host rejected), hostname matcher, ProfileCache against a local origin (parse, cache hit, negative caching, single ttwid); `make test` runs `luac -p` over the examples.
+
 ## 0.2.2
 
 - Proxy: one shared HTTP CONNECT tunnel (`piratetok.proxy`) for ttwid, HTTP API and WSS; `http://user:pass@host:port` sends `Proxy-Authorization: Basic`; SOCKS URLs are rejected with `InvalidUrl`.

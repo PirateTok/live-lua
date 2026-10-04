@@ -101,7 +101,7 @@ end
 
 function ProfileCache:_ensure_ttwid()
     if self._ttwid then return self._ttwid, nil end
-    local ttwid, err = auth.fetch_ttwid(TTWID_TIMEOUT, self._user_agent, self._proxy)
+    local ttwid, err = auth.fetch_ttwid_retrying(TTWID_TIMEOUT, self._user_agent, self._proxy)
     if not ttwid then return nil, err end
     self._ttwid = ttwid
     return ttwid, nil

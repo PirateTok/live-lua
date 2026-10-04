@@ -3,7 +3,7 @@
 -- Supports binary frames, ping/pong, close, non-blocking reads.
 local unpack = unpack or table.unpack
 local socket = require "socket"
-local ssl = require "ssl"
+local tls = require "piratetok.tls"
 local errors = require "piratetok.errors"
 local ua_mod = require "piratetok.ua"
 local proxy_mod = require "piratetok.proxy"
@@ -203,23 +203,10 @@ function M.connect(url, extra_headers, user_agent, proxy)
     tcp:setoption("tcp-nodelay", true)
 
     -- TLS wrap
-    local params = {
-        mode = "client",
-        protocol = "any",
-        verify = "none",
-        options = "all",
-    }
-    local tls_conn, tls_err = ssl.wrap(tcp, params)
+    local tls_conn, tls_err = tls.wrap(tcp, host)
     if not tls_conn then
         tcp:close()
-        return nil, errors.new(errors.WEBSOCKET_ERROR, "tls wrap failed: " .. tostring(tls_err))
-    end
-
-    tls_conn:sni(host)
-    local hs_ok, hs_err = tls_conn:dohandshake()
-    if not hs_ok then
-        tcp:close()
-        return nil, errors.new(errors.WEBSOCKET_ERROR, "tls handshake failed: " .. tostring(hs_err))
+        return nil, errors.new(errors.WEBSOCKET_ERROR, tls_err.message)
     end
 
     -- WebSocket upgrade

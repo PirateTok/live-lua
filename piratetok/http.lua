@@ -1,7 +1,7 @@
 --- HTTP API calls — room ID resolution and optional room info fetch.
 -- Uses raw luasocket+luasec for HTTP/TLS (no http library dependency).
 local socket = require "socket"
-local ssl = require "ssl"
+local tls = require "piratetok.tls"
 local errors = require "piratetok.errors"
 local ua = require "piratetok.ua"
 local audience = require "piratetok.audience"
@@ -55,25 +55,10 @@ local function https_get(host, path, timeout, cookies, user_agent, accept, proxy
         end
     end
 
-    local params = {
-        mode = "client",
-        protocol = "any",
-        verify = "none",
-        options = "all",
-    }
-    local conn, tls_err = ssl.wrap(tcp, params)
+    local conn, tls_err = tls.wrap(tcp, host)
     if not conn then
         tcp:close()
-        return nil, nil, errors.new(errors.HTTP_ERROR,
-            "tls wrap: " .. tostring(tls_err))
-    end
-
-    conn:sni(host)
-    local hs_ok, hs_err = conn:dohandshake()
-    if not hs_ok then
-        tcp:close()
-        return nil, nil, errors.new(errors.HTTP_ERROR,
-            "tls handshake: " .. tostring(hs_err))
+        return nil, nil, tls_err
     end
 
     local active_ua = user_agent or ua.random_ua()
@@ -462,11 +447,19 @@ function M.scrape_profile(username, ttwid, timeout, user_agent, cookies, proxy)
         end
     end
 
-    local body, http_status, http_err = https_get(
+    local body, _, http_err = https_get(
         "www.tiktok.com", "/@" .. clean, timeout, cookie_val, user_agent,
         "text/html,application/xhtml+xml", proxy)
     if http_err then return nil, http_err end
+    return M.parse_profile(body, clean)
+end
 
+--- Parse a profile page (SIGI JSON) into a profile table or a Profile* error. Pure.
+---@param body string|nil HTML
+---@param clean string normalized username (for error messages)
+---@return table|nil profile
+---@return table|nil error
+function M.parse_profile(body, clean)
     if not body or body == "" then
         return nil, errors.new(errors.PROFILE_SCRAPE, "empty HTML response")
     end

@@ -1,4 +1,4 @@
-.PHONY: deps discipline check test test-integration test-api test-wss test-load examples clean
+.PHONY: deps discipline check test examples-check test-integration test-api test-wss test-load examples clean
 
 LUA ?= lua
 
@@ -9,12 +9,17 @@ deps:
 	luarocks install lua-zlib
 	luarocks install lua-cjson
 
+examples-check:
+	$(LUAC) -p examples/*.lua examples/love2d/*.lua
+
 discipline:
 	$(LUA) discipline/scanner.lua .
 
 check: discipline
 
-test:
+LUAC ?= luac
+
+test: examples-check
 	$(LUA) tests/unit_test.lua
 	$(LUA) tests/wire_test.lua
 	$(LUA) tests/replay_test.lua

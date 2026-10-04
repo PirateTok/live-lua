@@ -30,6 +30,7 @@ build = {
         ["piratetok.auth"] = "piratetok/auth.lua",
         ["piratetok.audience"] = "piratetok/audience.lua",
         ["piratetok.proxy"] = "piratetok/proxy.lua",
+        ["piratetok.tls"] = "piratetok/tls.lua",
         ["piratetok.errors"] = "piratetok/errors.lua",
         ["piratetok.events"] = "piratetok/events.lua",
         ["piratetok.http"] = "piratetok/http.lua",

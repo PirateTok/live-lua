@@ -2,7 +2,7 @@
 -- The ttwid cookie is the sole credential needed for WSS connections.
 -- No signing, no browser, no session cookies required.
 local socket = require "socket"
-local ssl = require "ssl"
+local tls = require "piratetok.tls"
 local errors = require "piratetok.errors"
 local ua = require "piratetok.ua"
 local proxy_mod = require "piratetok.proxy"
@@ -64,25 +64,10 @@ function M.request_headers(timeout, active_ua, proxy)
         end
     end
 
-    local params = {
-        mode = "client",
-        protocol = "any",
-        verify = "none",
-        options = "all",
-    }
-    local conn, tls_err = ssl.wrap(tcp, params)
+    local conn, tls_err = tls.wrap(tcp, TIKTOK_HOST)
     if not conn then
         tcp:close()
-        return nil, errors.new(errors.HTTP_ERROR,
-            "tls wrap failed: " .. tostring(tls_err))
-    end
-
-    conn:sni(TIKTOK_HOST)
-    local hs_ok, hs_err = conn:dohandshake()
-    if not hs_ok then
-        tcp:close()
-        return nil, errors.new(errors.HTTP_ERROR,
-            "tls handshake failed: " .. tostring(hs_err))
+        return nil, tls_err
     end
 
     -- Send minimal GET — we only need the Set-Cookie header

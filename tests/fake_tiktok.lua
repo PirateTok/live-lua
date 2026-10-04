@@ -57,8 +57,25 @@ local function serve_ws(t)
     end
 end
 
+local function sigi(detail)
+    return '<html><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'
+        .. cjson.encode({ __DEFAULT_SCOPE__ = { ["webapp.user-detail"] = detail } }) .. "</script></html>"
+end
+
+local PROFILES = {
+    ["/@someone"] = sigi({ statusCode = 0, userInfo = {
+        user = { id = "6900000000000000001", uniqueId = "someone", nickname = "Some One", signature = "bio here",
+            avatarLarger = "https://p16/l.jpg", verified = true, privateAccount = false,
+            roomId = "7300000000000000002", bioLink = { link = "piratetok.rosint.org" } },
+        stats = { followerCount = 10, followingCount = 2, heartCount = 99, videoCount = 3, friendCount = 1 } } }),
+    ["/@privy"] = sigi({ statusCode = 10222 }),
+    ["/@ghost"] = sigi({ statusCode = 10221 }),
+}
+
 local function serve_http(t, head)
     local body, cookie = "ok", ""
+    local path = head:match("^GET (%S+)")
+    if PROFILES[path] then body = PROFILES[path] end
     if head:match("^GET /api%-live/user/room") then body = ROOM end
     if head:match("^GET / ") then cookie = "Set-Cookie: ttwid=1%7Cwire%7C9; Path=/; Secure\r\n" end
     t:send("HTTP/1.1 200 OK\r\n" .. cookie .. "Content-Type: application/json\r\nContent-Length: "
