@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.2.0
+## 0.2.1
+
+- `check_online()` error mapping: a non-zero `statusCode` is now `ApiError` (with `.code`), not `InvalidResponse`; a non-JSON / mangled body is `TikTokBlocked`.
+
+## 0.2.0 (tagged, never published to LuaRocks)
 
 - ttwid fetch retries up to 8× (750 ms apart) when tiktok.com answers without the cookie; transport errors still fail fast.
 - Reconnect loop: ttwid + UA fetched once per stream and reused across reconnects; rotated only on `DEVICE_BLOCKED` or a session that died within 30 s. A ttwid failure is a failed attempt (`reconnecting` fires), never an abort.

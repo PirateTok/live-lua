@@ -229,19 +229,25 @@ function M.parse_room_id(body, http_status, clean)
             "empty response — TikTok blocked request")
     end
 
+    -- mangled / non-JSON (captcha page, etc.) = TikTok blocked the request
     local ok, data = pcall(json_decode, body)
-    if not ok then
-        return nil, errors.new(errors.INVALID_RESPONSE,
-            "JSON parse failed: " .. tostring(data))
+    if not ok or type(data) ~= "table" then
+        return nil, errors.new(errors.TIKTOK_BLOCKED,
+            "non-JSON response (HTTP " .. tostring(http_status) .. ")")
     end
 
     local status_code = data.statusCode
-    if status_code == 19881007 then
+    if type(status_code) ~= "number" then
+        return nil, errors.new(errors.INVALID_RESPONSE,
+            "no statusCode in api-live/user/room response")
+    elseif status_code == 19881007 then
         return nil, errors.new(errors.USER_NOT_FOUND,
             "user '" .. clean .. "' does not exist on TikTok")
     elseif status_code ~= 0 then
-        return nil, errors.new(errors.INVALID_RESPONSE,
-            "tiktok api statusCode=" .. tostring(status_code))
+        local err = errors.new(errors.API_ERROR,
+            string.format("tiktok api statusCode=%d", status_code))
+        err.code = math.floor(status_code)
+        return nil, err
     end
 
     -- Extract room ID from nested response

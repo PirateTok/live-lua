@@ -329,6 +329,20 @@ test("check_online: error mapping", function()
     local _, e4 = http.parse_room_id(fixture({ statusCode = 0,
         data = { user = { id = "1", roomId = "0" } } }), 200, "x")
     check(e4.type == errors.HOST_NOT_ONLINE, "HostNotOnline")
+    local _, e5 = http.parse_room_id(fixture({ statusCode = 10101 }), 200, "x")
+    check(e5.type == errors.API_ERROR and e5.code == 10101, "ApiError(code)")
+    local _, e6 = http.parse_room_id("<html>captcha</html>", 200, "x")
+    check(e6.type == errors.TIKTOK_BLOCKED, "TikTokBlocked on non-JSON")
+end)
+
+test("gift helpers: combo, streak over, diamond total", function()
+    local combo = { gift_details = { gift_type = 1, diamond_count = 5 }, repeat_count = 3 }
+    local plain = { gift_details = { gift_type = 2, diamond_count = 100 }, repeat_count = 0 }
+    check(events.is_combo_gift(combo) and not events.is_combo_gift(plain), "is_combo")
+    check(not events.is_streak_over(combo), "combo streak running")
+    combo.repeat_end = 1
+    check(events.is_streak_over(combo) and events.is_streak_over(plain), "streak over")
+    check(events.diamond_total(combo) == 15 and events.diamond_total(plain) == 100, "diamond_total")
 end)
 
 io.write(string.format("\n--- %d passed, %d failed ---\n", passed, failed))
