@@ -210,6 +210,21 @@ test("loop: ttwid failure on connect() is a failed attempt, not an abort", funct
     check(#log.reconnecting == 1, "Reconnecting emitted")
 end)
 
+test("loop: stale timeout reconnects; disconnect() ends the loop", function()
+    local client, log = scripted_client({ "ok" }, 5)
+    client:_try_reconnect()
+    check(client._state == "connected", "connected")
+    now = now + 61
+    client:poll()
+    local last = log.reconnecting[#log.reconnecting]
+    check(last and last.reason:find("^stale"), "stale reconnect")
+    client:disconnect()
+    check(client._state == "disconnected" and log.disconnected == 1, "user disconnect")
+    now = now + 60
+    client:poll()
+    check(log.ttwid_fetches == 1 and #log.reconnecting == 1, "no reconnect after disconnect")
+end)
+
 test("url: heartbeat_duration follows heartbeat_interval", function()
     local url = require("piratetok.url").build_ws_url(
         "webcast-ws.tiktok.com", "1", "en", "US", true, 7)
