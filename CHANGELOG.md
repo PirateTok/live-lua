@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Proxy: one shared HTTP CONNECT tunnel (`piratetok.proxy`) for ttwid, HTTP API and WSS; `http://user:pass@host:port` sends `Proxy-Authorization: Basic`; SOCKS URLs are rejected with `InvalidUrl`.
+- WSS `Accept-Language` follows `:language()` / `:region()` (was hardcoded en-US).
+- `http.parse_room_info()` split out of `fetch_room_info()` (pure, testable).
+- Tests: `tests/wire_test.lua` — real client through a local Basic-auth CONNECT proxy + TLS fake (needs `openssl` for the test cert); unit tests for acks, room info parsing, proxy URLs.
+
 ## 0.2.1
 
 - `check_online()` error mapping: a non-zero `statusCode` is now `ApiError` (with `.code`), not `InvalidResponse`; a non-JSON / mangled body is `TikTokBlocked`.

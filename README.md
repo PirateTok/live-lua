@@ -115,7 +115,7 @@ local client = PirateTok.builder("username_here")
     :heartbeat_interval(10)     -- seconds between heartbeats (default 10)
     :stale_timeout(90)          -- reconnect after N seconds of silence (default 60)
     :max_retries(10)            -- consecutive failed reconnects before giving up (default 5)
-    :proxy("http://host:port")   -- HTTP/HTTPS proxy URL (CONNECT tunnel)
+    :proxy("http://user:pass@host:port") -- HTTP CONNECT proxy for HTTP + WSS (Basic auth optional; SOCKS not supported)
     :compress(false)            -- disable gzip compression for WSS payloads (default true)
     :user_agent("Mozilla/...")  -- override random UA rotation with a fixed user-agent
     :cookies("sessionid=xxx; sid_tt=xxx") -- session cookies for 18+ room info
@@ -252,7 +252,7 @@ make test
 
 Missing testdata is a test failure, not a skip. Lookup order: `$PIRATETOK_TESTDATA`, `testdata/`, `../live-testdata/` (manifests in `manifests/` or `captures/manifests/`). The `_raw` (uncompressed) captures are not in live-testdata — supply them via `testdata/` or `PIRATETOK_TESTDATA`.
 
-`make test` also runs `tests/unit_test.lua` — offline tests for ttwid retry, reconnect policy, `ranks_list`/`top_viewers`, audience parsing and `check_online` error mapping.
+`make test` also runs `tests/unit_test.lua` — offline tests for ttwid retry, reconnect policy, acks, `ranks_list`/`top_viewers`, audience / room info parsing and `check_online` error mapping — and `tests/wire_test.lua`, which drives the real client through a local Basic-auth CONNECT proxy + TLS fake (requires `openssl` to make the test cert).
 
 ## License
 

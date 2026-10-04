@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "piratetok-live-lua"
-version = "0.2.1-1"
+version = "0.2.2-1"
 source = {
     url = "git+https://github.com/PirateTok/live-lua.git",
-    tag = "v0.2.1",
+    tag = "v0.2.2",
 }
 description = {
     summary = "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
@@ -32,6 +32,7 @@ build = {
         ["piratetok"] = "piratetok/init.lua",
         ["piratetok.auth"] = "piratetok/auth.lua",
         ["piratetok.audience"] = "piratetok/audience.lua",
+        ["piratetok.proxy"] = "piratetok/proxy.lua",
         ["piratetok.errors"] = "piratetok/errors.lua",
         ["piratetok.events"] = "piratetok/events.lua",
         ["piratetok.http"] = "piratetok/http.lua",

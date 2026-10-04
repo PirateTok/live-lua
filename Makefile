@@ -16,6 +16,7 @@ check: discipline
 
 test:
 	$(LUA) tests/unit_test.lua
+	$(LUA) tests/wire_test.lua
 	$(LUA) tests/replay_test.lua
 
 # Integration tests — hit real TikTok endpoints.

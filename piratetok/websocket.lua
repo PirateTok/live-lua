@@ -6,6 +6,7 @@ local socket = require "socket"
 local ssl = require "ssl"
 local errors = require "piratetok.errors"
 local ua_mod = require "piratetok.ua"
+local proxy_mod = require "piratetok.proxy"
 
 -- Bit ops compat: LuaJIT uses 'bit' library, Lua 5.3+ has native operators
 local bit = bit  -- luacheck: ignore
@@ -98,7 +99,7 @@ end
 ---@return boolean success
 ---@return string|nil error message or nil
 ---@return boolean|nil is_device_blocked (true when DEVICE_BLOCKED detected)
-local function do_handshake(conn, host, path, cookie, user_agent)
+local function do_handshake(conn, host, path, cookie, user_agent, accept_language)
     local active_ua = user_agent or ua_mod.random_ua()
 
     -- Generate random Sec-WebSocket-Key
@@ -119,7 +120,7 @@ local function do_handshake(conn, host, path, cookie, user_agent)
         "User-Agent: " .. active_ua,
         "Referer: https://www.tiktok.com/",
         "Origin: https://www.tiktok.com",
-        "Accept-Language: en-US,en;q=0.9",
+        "Accept-Language: " .. (accept_language or "en-US,en;q=0.9"),
         "Accept-Encoding: gzip, deflate",
         "Cache-Control: no-cache",
         "Cookie: " .. cookie,
@@ -165,63 +166,9 @@ local function do_handshake(conn, host, path, cookie, user_agent)
     return true, nil, false
 end
 
---- Parse an HTTP/HTTPS proxy URL into host and port.
----@param proxy_url string proxy URL (e.g. "http://proxy:8080")
----@return string|nil host
----@return number|nil port
----@return string|nil error
-local function parse_proxy_url(proxy_url)
-    local phost, pport = proxy_url:match("^https?://([^:/]+):?(%d*)/?$")
-    if not phost then
-        return nil, nil, "invalid proxy URL: " .. proxy_url
-    end
-    pport = tonumber(pport) or 8080
-    return phost, pport, nil
-end
-
---- Establish a TCP connection through an HTTP CONNECT tunnel.
----@param tcp userdata raw TCP socket
----@param proxy_host string proxy hostname
----@param proxy_port number proxy port
----@param target_host string destination host to tunnel to
----@param target_port number destination port to tunnel to
----@return boolean success
----@return string|nil error
-local function proxy_connect_tunnel(tcp, proxy_host, proxy_port,
-                                    target_host, target_port)
-    local ok, conn_err = tcp:connect(proxy_host, proxy_port)
-    if not ok then
-        return false, "proxy connect failed: " .. tostring(conn_err)
-    end
-
-    local connect_req = "CONNECT " .. target_host .. ":" .. target_port
-        .. " HTTP/1.1\r\nHost: " .. target_host .. ":" .. target_port
-        .. "\r\n\r\n"
-    local _, send_err = tcp:send(connect_req)
-    if send_err then
-        return false, "proxy CONNECT send failed: " .. tostring(send_err)
-    end
-
-    local status_line, recv_err = tcp:receive("*l")
-    if not status_line then
-        return false, "proxy CONNECT response failed: " .. tostring(recv_err)
-    end
-    if not status_line:match("^HTTP/1%.. 200") then
-        return false, "proxy CONNECT rejected: " .. tostring(status_line)
-    end
-
-    -- Drain remaining proxy response headers
-    while true do
-        local line = tcp:receive("*l")
-        if not line or line == "" then break end
-    end
-
-    return true, nil
-end
-
 --- Connect to a WSS endpoint.
 ---@param url string full wss:// URL
----@param extra_headers table headers to send with upgrade (Cookie field)
+---@param extra_headers table upgrade headers: Cookie, Accept-Language
 ---@param user_agent string|nil override UA (default: random from pool)
 ---@param proxy string|nil HTTP proxy URL for CONNECT tunnel
 ---@return table|nil websocket client object
@@ -236,18 +183,10 @@ function M.connect(url, extra_headers, user_agent, proxy)
     tcp:settimeout(10)
 
     if proxy and proxy ~= "" then
-        -- HTTP CONNECT tunnel through proxy
-        local phost, pport, perr = parse_proxy_url(proxy)
-        if perr then
-            tcp:close()
-            return nil, errors.new(errors.WEBSOCKET_ERROR, perr)
-        end
-
-        local tun_ok, tun_err = proxy_connect_tunnel(
-            tcp, phost, pport, host, port)
+        local tun_ok, tun_err = proxy_mod.tunnel(tcp, proxy, host, port)
         if not tun_ok then
             tcp:close()
-            return nil, errors.new(errors.WEBSOCKET_ERROR, tun_err)
+            return nil, errors.new(errors.WEBSOCKET_ERROR, tun_err.message)
         end
     else
         local ok, conn_err = tcp:connect(host, port)
@@ -284,10 +223,10 @@ function M.connect(url, extra_headers, user_agent, proxy)
     end
 
     -- WebSocket upgrade
-    local cookie = (extra_headers or {}).Cookie or ""
-
+    local headers = extra_headers or {}
     local ws_ok, ws_err, is_blocked = do_handshake(
-        tls_conn, host, path, cookie, user_agent)
+        tls_conn, host, path, headers.Cookie or "", user_agent,
+        headers["Accept-Language"])
     if not ws_ok then
         tls_conn:close()
         if is_blocked then

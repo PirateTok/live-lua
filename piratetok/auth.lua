@@ -5,6 +5,7 @@ local socket = require "socket"
 local ssl = require "ssl"
 local errors = require "piratetok.errors"
 local ua = require "piratetok.ua"
+local proxy_mod = require "piratetok.proxy"
 
 local M = {}
 
@@ -50,32 +51,10 @@ function M.request_headers(timeout, active_ua, proxy)
     tcp:settimeout(timeout)
 
     if proxy and proxy ~= "" then
-        local phost, pport = proxy:match("^https?://([^:/]+):?(%d*)/?$")
-        if not phost then
-            return nil, errors.new(errors.HTTP_ERROR,
-                "invalid proxy URL: " .. tostring(proxy))
-        end
-        pport = tonumber(pport) or 8080
-
-        local ok, conn_err = tcp:connect(phost, pport)
+        local ok, tun_err = proxy_mod.tunnel(tcp, proxy, TIKTOK_HOST, 443)
         if not ok then
-            return nil, errors.new(errors.HTTP_ERROR,
-                "proxy connect failed: " .. tostring(conn_err))
-        end
-
-        local connect_req = "CONNECT " .. TIKTOK_HOST .. ":443 HTTP/1.1\r\n"
-            .. "Host: " .. TIKTOK_HOST .. ":443\r\n\r\n"
-        tcp:send(connect_req)
-
-        local status_line = tcp:receive("*l")
-        if not status_line or not status_line:match("^HTTP/1%.. 200") then
             tcp:close()
-            return nil, errors.new(errors.HTTP_ERROR,
-                "proxy CONNECT failed: " .. tostring(status_line))
-        end
-        while true do
-            local line = tcp:receive("*l")
-            if not line or line == "" then break end
+            return nil, tun_err
         end
     else
         local ok, conn_err = tcp:connect(TIKTOK_HOST, 443)

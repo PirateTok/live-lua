@@ -179,8 +179,12 @@ function Client:_connect_ws()
     local ws_url = url_mod.build_ws_url(
         self.cdn_host, self._room_id, self.language, self.region,
         self.compress, self.heartbeat_interval)
-    local conn, ws_err = ws.connect(
-        ws_url, { Cookie = cookie_val }, session.user_agent, self.proxy)
+    local lang = self.language or ua_mod.system_language()
+    local region = self.region or ua_mod.system_region()
+    local conn, ws_err = ws.connect(ws_url, {
+        Cookie = cookie_val,
+        ["Accept-Language"] = lang .. "-" .. region .. "," .. lang .. ";q=0.9",
+    }, session.user_agent, self.proxy)
     if not conn then return ws_err end
 
     self._ws = conn

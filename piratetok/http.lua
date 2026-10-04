@@ -5,6 +5,7 @@ local ssl = require "ssl"
 local errors = require "piratetok.errors"
 local ua = require "piratetok.ua"
 local audience = require "piratetok.audience"
+local proxy_mod = require "piratetok.proxy"
 
 local M = {}
 
@@ -41,34 +42,10 @@ local function https_get(host, path, timeout, cookies, user_agent, accept, proxy
     tcp:settimeout(timeout)
 
     if proxy and proxy ~= "" then
-        -- HTTP CONNECT tunneling through proxy
-        local phost, pport = proxy:match("^https?://([^:/]+):?(%d*)/?$")
-        if not phost then
-            return nil, nil, errors.new(errors.HTTP_ERROR,
-                "invalid proxy URL: " .. proxy)
-        end
-        pport = tonumber(pport) or 8080
-
-        local ok, conn_err = tcp:connect(phost, pport)
+        local ok, tun_err = proxy_mod.tunnel(tcp, proxy, host, 443)
         if not ok then
-            return nil, nil, errors.new(errors.HTTP_ERROR,
-                "proxy connect failed: " .. tostring(conn_err))
-        end
-
-        local connect_req = "CONNECT " .. host .. ":443 HTTP/1.1\r\n"
-            .. "Host: " .. host .. ":443\r\n\r\n"
-        tcp:send(connect_req)
-
-        local status_line = tcp:receive("*l")
-        if not status_line or not status_line:match("^HTTP/1%.. 200") then
             tcp:close()
-            return nil, nil, errors.new(errors.HTTP_ERROR,
-                "proxy CONNECT failed: " .. tostring(status_line))
-        end
-        -- drain remaining proxy response headers
-        while true do
-            local line = tcp:receive("*l")
-            if not line or line == "" then break end
+            return nil, nil, tun_err
         end
     else
         local ok, conn_err = tcp:connect(host, 443)
@@ -352,7 +329,15 @@ function M.fetch_room_info(room_id, timeout, cookies, user_agent,
     if http_err then
         return nil, http_err
     end
+    return M.parse_room_info(body, http_status)
+end
 
+--- Map a /webcast/room/info/ response to room info or an error. Pure — no I/O.
+---@param body string|nil response body
+---@param http_status number|nil HTTP status
+---@return table|nil room info {title, viewers, likes, total_viewers, stream_url, raw_json}
+---@return table|nil error
+function M.parse_room_info(body, http_status)
     if not body or body == "" then
         return nil, errors.new(errors.INVALID_RESPONSE,
             "empty response from room/info (http " .. tostring(http_status) .. ")")

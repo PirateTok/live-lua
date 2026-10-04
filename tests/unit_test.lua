@@ -345,5 +345,55 @@ test("gift helpers: combo, streak over, diamond total", function()
     check(events.diamond_total(combo) == 15 and events.diamond_total(plain) == 100, "diamond_total")
 end)
 
+-- ---- F2: needs_ack -> ack frame ----
+
+test("push frame: needs_ack sends ack with log_id + exact internal_ext", function()
+    local ext = "\255\0\195\40"
+    local raw = assert(pb.encode("WebcastPushFrame", {
+        log_id = 42, payload_encoding = "pb", payload_type = "msg",
+        payload = assert(pb.encode("WebcastResponse", { needs_ack = true, internal_ext = ext })),
+    }))
+    local sent = {}
+    local client = piratetok.builder("someone"):build()
+    client._ws = { send_binary = function(_, data) sent[#sent + 1] = data; return true end }
+    client:_process_binary(raw)
+    check(#sent == 1, "one ack sent")
+    local ack = pb.decode("WebcastPushFrame", sent[1])
+    check(ack.payload_type == "ack" and ack.log_id == 42, "ack frame + log_id")
+    check(ack.payload == ext, "internal_ext byte-exact")
+end)
+
+-- ---- F9: room info parsing ----
+
+test("room info: fields, FLV urls (uhd fallback), AgeRestricted", function()
+    local sd = cjson.encode({ data = { origin = { main = { flv = "o.flv" } },
+        uhd = { main = { flv = "u.flv" } }, sd = { main = { flv = "s.flv" } } } })
+    local body = fixture({ status_code = 0, data = { title = "T", user_count = 5,
+        stats = { like_count = 6, total_user = 7 },
+        stream_url = { live_core_sdk_data = { pull_data = { stream_data = sd } } } } })
+    local info, err = http.parse_room_info(body, 200)
+    check(err == nil, "no error")
+    check(info.title == "T" and info.viewers == 5 and info.likes == 6 and info.total_viewers == 7, "fields")
+    check(info.stream_url.flv_origin == "o.flv" and info.stream_url.flv_hd == "u.flv"
+        and info.stream_url.flv_sd == "s.flv" and info.stream_url.flv_ld == nil, "flv")
+    check(info.raw_json == body, "raw_json")
+    local _, e1 = http.parse_room_info(fixture({ status_code = 4003110 }), 200)
+    check(e1.type == errors.AGE_RESTRICTED, "AgeRestricted")
+    local _, e2 = http.parse_room_info("", 502)
+    check(e2.type == errors.INVALID_RESPONSE, "empty")
+end)
+
+-- ---- F6: proxy URL parsing ----
+
+test("proxy: userinfo -> Basic auth; socks rejected", function()
+    local proxy = require "piratetok.proxy"
+    local p = assert(proxy.parse("http://user:p%40ss@127.0.0.1:3128"))
+    check(p.host == "127.0.0.1" and p.port == 3128, "host/port")
+    check(p.auth == "Basic " .. require("mime").b64("user:p@ss"), "basic auth")
+    check(assert(proxy.parse("http://proxy.local")).port == 8080 and proxy.parse("http://proxy.local").auth == nil, "defaults")
+    local none, err = proxy.parse("socks5://127.0.0.1:1080")
+    check(none == nil and err.type == errors.INVALID_URL, "socks rejected")
+end)
+
 io.write(string.format("\n--- %d passed, %d failed ---\n", passed, failed))
 if failed > 0 or passed == 0 then os.exit(1) end
