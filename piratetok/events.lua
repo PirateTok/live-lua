@@ -196,6 +196,21 @@ function M.decode_message(msg_type, payload)
     return events
 end
 
+--- RoomUserSeq helper: the top-viewers box next to the viewer counter.
+-- Entries of ranks_list without a decoded user are skipped; the rest come
+-- back sorted by rank ascending.
+---@param seq table decoded WebcastRoomUserSeqMessage
+---@return table list of Contributor tables {score, user, rank, delta}
+function M.top_viewers(seq)
+    local top = {}
+    local ranks = seq.ranks_list or {}
+    for i = 1, #ranks do
+        if ranks[i].user then top[#top + 1] = ranks[i] end
+    end
+    table.sort(top, function(a, b) return (a.rank or 0) < (b.rank or 0) end)
+    return top
+end
+
 --- Gift helper: check if a gift is a combo gift.
 ---@param gift table decoded WebcastGiftMessage
 ---@return boolean

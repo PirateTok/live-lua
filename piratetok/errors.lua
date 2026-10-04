@@ -7,6 +7,7 @@ local M = {}
 M.USER_NOT_FOUND = "UserNotFound"
 M.HOST_NOT_ONLINE = "HostNotOnline"
 M.AGE_RESTRICTED = "AgeRestricted"
+M.SESSION_REQUIRED = "SessionRequired"
 M.DEVICE_BLOCKED = "DeviceBlocked"
 M.TIKTOK_BLOCKED = "TikTokBlocked"
 M.CONNECTION_CLOSED = "ConnectionClosed"

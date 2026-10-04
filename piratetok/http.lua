@@ -4,6 +4,7 @@ local socket = require "socket"
 local ssl = require "ssl"
 local errors = require "piratetok.errors"
 local ua = require "piratetok.ua"
+local audience = require "piratetok.audience"
 
 local M = {}
 
@@ -207,7 +208,17 @@ function M.fetch_room_id(username, timeout, user_agent, proxy,
     if http_err then
         return nil, http_err
     end
+    return M.parse_room_id(body, http_status, clean)
+end
 
+--- Map an /api-live/user/room response to {room_id, anchor_id} or an error.
+-- Pure — no I/O.
+---@param body string|nil response body
+---@param http_status number|nil HTTP status
+---@param clean string username (for error messages)
+---@return table|nil result {room_id, anchor_id}
+---@return table|nil error
+function M.parse_room_id(body, http_status, clean)
     if http_status == 403 or http_status == 429 then
         return nil, errors.new(errors.TIKTOK_BLOCKED,
             "HTTP " .. tostring(http_status) .. " — rate-limited or geo-blocked")
@@ -257,7 +268,15 @@ function M.fetch_room_id(username, timeout, user_agent, proxy,
             "'" .. clean .. "' is not currently live (status=" .. tostring(live_status) .. ")")
     end
 
-    return { room_id = room_id }, nil
+    -- Streamer user id — needed by fetch_room_audience(). TikTok sends it as
+    -- a string; a number would already have lost precision in cjson.
+    local anchor_id = nil
+    local user_id = data.data.user.id
+    if type(user_id) == "string" and user_id ~= "" then
+        anchor_id = user_id
+    end
+
+    return { room_id = room_id, anchor_id = anchor_id }, nil
 end
 
 --- Parse nested stream URL JSON.
@@ -303,10 +322,11 @@ end
 ---@param user_agent string|nil override UA (default: random from pool)
 ---@param lang_override string|nil override system language (e.g. "en")
 ---@param region_override string|nil override system region (e.g. "US")
+---@param proxy string|nil HTTP proxy URL
 ---@return table|nil room info
 ---@return table|nil error
 function M.fetch_room_info(room_id, timeout, cookies, user_agent,
-                           lang_override, region_override)
+                           lang_override, region_override, proxy)
     timeout = timeout or 10
 
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
@@ -322,7 +342,7 @@ function M.fetch_room_info(room_id, timeout, cookies, user_agent,
         .. "&room_id=" .. room_id
 
     local body, http_status, http_err = https_get(
-        "webcast.tiktok.com", path, timeout, cookies, user_agent)
+        "webcast.tiktok.com", path, timeout, cookies, user_agent, nil, proxy)
     if http_err then
         return nil, http_err
     end
@@ -362,6 +382,52 @@ function M.fetch_room_info(room_id, timeout, cookies, user_agent,
     }
 
     return info, nil
+end
+
+--- Fetch the full audience roster: every named viewer currently in the room
+-- (the web viewer panel, not just the top-3 box — for that see
+-- events.top_viewers() on the WSS room_user_seq event, which needs no cookies).
+-- Login-gated: pass session cookies ("sessionid=xxx; sid_tt=xxx") or you get
+-- a SessionRequired error. Cookies are required for this call only.
+---@param room_id string
+---@param anchor_id string|nil streamer user id (check_online().anchor_id);
+---       nil resolves it via fetch_room_info (one extra request)
+---@param cookies string|nil session cookies
+---@param timeout number seconds (default 10)
+---@param user_agent string|nil override UA (default: random from pool)
+---@param lang_override string|nil override system language (e.g. "en")
+---@param region_override string|nil override system region (e.g. "US")
+---@param proxy string|nil HTTP proxy URL
+---@return table|nil RoomAudience {total, anonymous, viewers, raw_json}
+---@return table|nil error
+function M.fetch_room_audience(room_id, anchor_id, cookies, timeout,
+                               user_agent, lang_override, region_override,
+                               proxy)
+    timeout = timeout or 10
+
+    if not anchor_id or anchor_id == "" then
+        local info, info_err = M.fetch_room_info(room_id, timeout, cookies,
+            user_agent, lang_override, region_override, proxy)
+        if not info then return nil, info_err end
+        local owner, owner_err = audience.owner_id(info.raw_json, json_decode)
+        if not owner then return nil, owner_err end
+        anchor_id = owner
+    end
+
+    local lang = lang_override or ua.system_language()
+    local region = region_override or ua.system_region()
+    local path = "/webcast/ranklist/online_audience/?aid=1988"
+        .. "&app_name=tiktok_web&device_platform=web_pc"
+        .. "&app_language=" .. lang
+        .. "&browser_language=" .. lang .. "-" .. region
+        .. "&channel=tiktok_web&room_id=" .. room_id
+        .. "&anchor_id=" .. anchor_id
+
+    local body, http_status, http_err = https_get(
+        "webcast.tiktok.com", path, timeout, cookies, user_agent, nil, proxy)
+    if http_err then return nil, http_err end
+
+    return audience.parse(body, http_status, json_decode)
 end
 
 --- Check if a user is online (standalone, doesn't connect).

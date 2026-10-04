@@ -2,8 +2,8 @@
 --- Replay test -- reads a capture file, processes it through the full decode
 --- pipeline, and asserts every value matches the manifest JSON.
 ---
---- Skips if testdata is not available. Set PIRATETOK_TESTDATA env var or
---- place captures in ../live-testdata/.
+--- Missing testdata is a failure. Looks in $PIRATETOK_TESTDATA, then the
+--- local testdata/ (captures/ + manifests/), then ../live-testdata/captures/.
 ---
 --- Usage: lua tests/replay_test.lua
 
@@ -151,23 +151,25 @@ local function file_exists(path)
     return false
 end
 
+--- Testdata roots, in order: $PIRATETOK_TESTDATA, local testdata/, sibling
+--- ../live-testdata. Manifests live in <root>/manifests/ or, in the
+--- live-testdata repo layout, <root>/captures/manifests/.
 local function find_paths(name, capture_suffix)
     local cap_name = name .. (capture_suffix or "") .. ".bin"
     local man_name = name .. ".json"
-    -- 1. $PIRATETOK_TESTDATA
+    local roots = {}
     local env = os.getenv("PIRATETOK_TESTDATA")
-    if env and env ~= "" then
-        local cap = env .. "/captures/" .. cap_name
-        local man = env .. "/manifests/" .. man_name
-        if file_exists(cap) and file_exists(man) then
-            return cap, man
+    if env and env ~= "" then roots[#roots + 1] = env end
+    roots[#roots + 1] = "testdata"
+    roots[#roots + 1] = "../live-testdata"
+    for _, root in ipairs(roots) do
+        local cap = root .. "/captures/" .. cap_name
+        for _, man_dir in ipairs({ "/manifests/", "/captures/manifests/" }) do
+            local man = root .. man_dir .. man_name
+            if file_exists(cap) and file_exists(man) then
+                return cap, man
+            end
         end
-    end
-    -- 2. testdata/ in repo root
-    local cap2 = "testdata/captures/" .. cap_name
-    local man2 = "testdata/manifests/" .. man_name
-    if file_exists(cap2) and file_exists(man2) then
-        return cap2, man2
     end
     return nil, nil
 end
@@ -476,10 +478,11 @@ local function run_capture_test(name)
     local cap_path, man_path = find_paths(name)
     if not cap_path then
         io.write(string.format(
-            "SKIP %s: no testdata (set PIRATETOK_TESTDATA or clone "
+            "FAIL %s: no testdata (set PIRATETOK_TESTDATA or clone "
             .. "live-testdata)\n", name))
-        return "skip"
+        return "fail"
     end
+    io.write(string.format("LOAD %s <- %s + %s\n", name, cap_path, man_path))
 
     io.write(string.format("RUN  %s ... ", name))
     io.flush()
@@ -517,10 +520,11 @@ local function run_raw_capture_test(name)
     local cap_path, man_path = find_paths(name, "_raw")
     if not cap_path then
         io.write(string.format(
-            "SKIP %s_raw: no testdata (set PIRATETOK_TESTDATA or clone "
+            "FAIL %s_raw: no testdata (set PIRATETOK_TESTDATA or clone "
             .. "live-testdata)\n", name))
-        return "skip"
+        return "fail"
     end
+    io.write(string.format("LOAD %s_raw <- %s + %s\n", name, cap_path, man_path))
 
     local display = name .. "_raw"
     io.write(string.format("RUN  %s ... ", display))
@@ -577,4 +581,4 @@ io.write(string.format(
     "\n--- %d passed, %d failed, %d skipped ---\n\n",
     pass, fail, skip))
 
-if fail > 0 then os.exit(1) end
+if fail > 0 or skip > 0 or pass == 0 then os.exit(1) end

@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "piratetok-live-lua"
-version = "0.1.6-1"
+version = "0.2.0-1"
 source = {
     url = "git+https://github.com/PirateTok/live-lua.git",
-    tag = "v0.1.6",
+    tag = "v0.2.0",
 }
 description = {
     summary = "TikTok Live WebSocket connector — real-time chat, gifts, likes, and viewer events. No authentication required.",
@@ -15,7 +15,7 @@ description = {
     ]],
     license = "0BSD",
     maintainer = "Zmole Cristian",
-    homepage = "https://piratetok.boats",
+    homepage = "https://piratetok.rosint.org",
     labels = {"tiktok", "tiktok-live", "live", "stream", "chat", "gifts", "websocket", "protobuf", "realtime", "piratetok"},
 }
 dependencies = {
@@ -31,6 +31,7 @@ build = {
     modules = {
         ["piratetok"] = "piratetok/init.lua",
         ["piratetok.auth"] = "piratetok/auth.lua",
+        ["piratetok.audience"] = "piratetok/audience.lua",
         ["piratetok.errors"] = "piratetok/errors.lua",
         ["piratetok.events"] = "piratetok/events.lua",
         ["piratetok.http"] = "piratetok/http.lua",

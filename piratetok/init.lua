@@ -134,6 +134,7 @@ function Client:connect()
     end
     self._state = "connecting"
     self._attempt = 0
+    self._session = nil
 
     local result, room_err = http.fetch_room_id(
         self.username, self.timeout, self.user_agent, self.proxy,
@@ -147,40 +148,45 @@ function Client:connect()
     self._room_id = result.room_id
     self:_emit("connected", { room_id = self._room_id })
 
-    local ws_err = self:_connect_ws()
-    if ws_err then
-        self._state = "reconnecting"
-        self._reconnect_at = socket.gettime() + 2
-    end
+    self:_try_reconnect()
     return true, nil
 end
 
---- Internal: establish WSS connection with fresh ttwid.
---- Uses user-configured UA if set, otherwise picks random from pool.
+--- Internal: ttwid + UA for this stream. Fetched once and reused across
+--- reconnects; dropped (rotated) only by _start_reconnect.
+function Client:_ensure_session()
+    if self._session then return self._session, nil end
+    local active_ua = self.user_agent or ua_mod.random_ua()
+    local ttwid, err = auth.fetch_ttwid_retrying(
+        self.timeout, active_ua, self.proxy)
+    if not ttwid then return nil, err end
+    self._session = { ttwid = ttwid, user_agent = active_ua }
+    return self._session, nil
+end
+
+--- Internal: establish WSS connection with the held (or a fresh) session.
 --- Uses user-configured cookies appended to ttwid cookie if set.
 function Client:_connect_ws()
-    -- Pick UA: user override or random from pool
-    local active_ua = self.user_agent or ua_mod.random_ua()
-
-    local ttwid, ttwid_err = auth.fetch_ttwid(self.timeout, active_ua, self.proxy)
-    if not ttwid then return ttwid_err end
+    local session, session_err = self:_ensure_session()
+    if not session then return session_err end
 
     -- Build cookie header: ttwid always present, user cookies appended if set
-    local cookie_val = "ttwid=" .. ttwid
+    local cookie_val = "ttwid=" .. session.ttwid
     if self.cookies and self.cookies ~= "" then
         cookie_val = cookie_val .. "; " .. self.cookies
     end
 
     local ws_url = url_mod.build_ws_url(
         self.cdn_host, self._room_id, self.language, self.region,
-        self.compress)
+        self.compress, self.heartbeat_interval)
     local conn, ws_err = ws.connect(
-        ws_url, { Cookie = cookie_val }, active_ua, self.proxy)
+        ws_url, { Cookie = cookie_val }, session.user_agent, self.proxy)
     if not conn then return ws_err end
 
     self._ws = conn
     self._state = "connected"
-    self._last_data = socket.gettime()
+    self._connected_at = socket.gettime()
+    self._last_data = self._connected_at
     self._last_heartbeat = 0
 
     local hb, hb_err = frames.build_heartbeat(self._room_id)
@@ -283,23 +289,39 @@ function Client:_process_binary(data)
     end
 end
 
+--- A session that stayed up this long counts as healthy: the attempt
+--- counter resets and the ttwid + UA are kept for the next connection.
+M.HEALTHY_SESSION_SECS = 30
+local DEVICE_BLOCKED_DELAY = 2
+local MAX_BACKOFF = 30
+
 --- Internal: enter reconnection state.
+--- max_retries bounds *consecutive* failures: a healthy session resets the
+--- counter. ttwid + UA rotate only on DEVICE_BLOCKED or a short-lived session.
 ---@param reason string human-readable reason
 ---@param device_blocked boolean|nil true if DEVICE_BLOCKED triggered this
 function Client:_start_reconnect(reason, device_blocked)
     if self._ws then self._ws:close(); self._ws = nil end
-    self._attempt = self._attempt + 1
+    local healthy = self._connected_at ~= nil
+        and socket.gettime() - self._connected_at >= M.HEALTHY_SESSION_SECS
+    self._connected_at = nil
+
+    if device_blocked or not healthy then self._session = nil end
+    if healthy and not device_blocked then
+        self._attempt = 1
+    else
+        self._attempt = self._attempt + 1
+    end
     if self._attempt > self.max_retries then
         self._state = "disconnected"
         self:_emit("disconnected", { reason = reason })
         return
     end
-    -- DEVICE_BLOCKED: short 2s delay, will get fresh ttwid+UA in _try_reconnect
     local delay
     if device_blocked then
-        delay = 2
+        delay = DEVICE_BLOCKED_DELAY
     else
-        delay = math.min(2 ^ self._attempt, 30)
+        delay = math.min(2 ^ self._attempt, MAX_BACKOFF)
     end
     self._state = "reconnecting"
     self._reconnect_at = socket.gettime() + delay
@@ -335,6 +357,8 @@ end
 
 M.check_online = http.check_online
 M.fetch_room_info = http.fetch_room_info
+M.fetch_room_audience = http.fetch_room_audience
+M.top_viewers = events_mod.top_viewers
 M.errors = errors
 M.events = events_mod
 M.ProfileCache = require "piratetok.helpers.profile_cache"

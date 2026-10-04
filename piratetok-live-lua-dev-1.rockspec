@@ -28,6 +28,7 @@ build = {
     modules = {
         ["piratetok"] = "piratetok/init.lua",
         ["piratetok.auth"] = "piratetok/auth.lua",
+        ["piratetok.audience"] = "piratetok/audience.lua",
         ["piratetok.errors"] = "piratetok/errors.lua",
         ["piratetok.events"] = "piratetok/events.lua",
         ["piratetok.http"] = "piratetok/http.lua",

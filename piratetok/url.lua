@@ -17,8 +17,10 @@ M.CDN_HOSTS = {
 ---@param lang_override string|nil override system language (e.g. "en")
 ---@param region_override string|nil override system region (e.g. "US")
 ---@param use_compress boolean|nil whether to request gzip compression (default true)
+---@param heartbeat_secs number|nil heartbeat interval, sent as heartbeat_duration ms (default 10)
 ---@return string
-function M.build_ws_url(cdn_host, room_id, lang_override, region_override, use_compress)
+function M.build_ws_url(cdn_host, room_id, lang_override, region_override,
+                        use_compress, heartbeat_secs)
     local last_rtt = string.format("%.3f", 100 + math.random() * 100)
     local tz_name = ua.system_timezone():gsub("/", "%%2F")
     local ws_lang = lang_override or ua.system_language()
@@ -51,7 +53,7 @@ function M.build_ws_url(cdn_host, room_id, lang_override, region_override, use_c
         "identity=audience",
         "history_comment_count=6",
         "last_rtt=" .. last_rtt,
-        "heartbeat_duration=10000",
+        "heartbeat_duration=" .. string.format("%d", math.floor((heartbeat_secs or 10) * 1000)),
         "resp_content_type=protobuf",
         "did_rule=3",
     }

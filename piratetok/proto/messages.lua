@@ -54,11 +54,22 @@ message WebcastSocialMessage {
     int32 follow_count = 6;
 }
 
+message Contributor {
+    int64 score = 1;
+    User user = 2;
+    int64 rank = 3;
+    int64 delta = 4;
+}
+
 message WebcastRoomUserSeqMessage {
     bytes common = 1;
-    int32 viewer_count = 3;
+    repeated Contributor ranks_list = 2;
+    int64 viewer_count = 3;
+    string pop_str = 4;
+    repeated Contributor seats_list = 5;
     int64 popularity = 6;
-    int32 total_user = 7;
+    int64 total_user = 7;
+    int64 anonymous = 8;
 }
 
 message WebcastControlMessage {

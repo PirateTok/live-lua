@@ -114,7 +114,7 @@ local client = PirateTok.builder("username_here")
     :timeout(15)                -- HTTP timeout in seconds (default 10)
     :heartbeat_interval(10)     -- seconds between heartbeats (default 10)
     :stale_timeout(90)          -- reconnect after N seconds of silence (default 60)
-    :max_retries(10)            -- reconnect attempts (default 5)
+    :max_retries(10)            -- consecutive failed reconnects before giving up (default 5)
     :proxy("http://host:port")   -- HTTP/HTTPS proxy URL (CONNECT tunnel)
     :compress(false)            -- disable gzip compression for WSS payloads (default true)
     :user_agent("Mozilla/...")  -- override random UA rotation with a fixed user-agent
@@ -134,7 +134,7 @@ local client = PirateTok.builder("username_here")
 | `join` | `.user` (sub-routed from MemberMessage) |
 | `follow` | `.user` (sub-routed from SocialMessage) |
 | `share` | `.user` (sub-routed from SocialMessage) |
-| `room_user_seq` | `.viewer_count`, `.total_user` |
+| `room_user_seq` | `.viewer_count`, `.total_user`, `.anonymous`, `.pop_str`, `.ranks_list` (use `PirateTok.top_viewers(data)`) |
 | `live_ended` | `.reason` (sub-routed from ControlMessage) |
 | `connected` | `.room_id` |
 | `reconnecting` | `.attempt`, `.max_retries`, `.delay_secs`, `.reason` |
@@ -153,9 +153,35 @@ local result, err = PirateTok.check_online("username_here")
 if not result then
     print(PirateTok.errors.format(err))  -- "not found" / "not online" / "blocked"
 else
-    print("LIVE — room_id: " .. result.room_id)
+    print("LIVE — room_id: " .. result.room_id .. " anchor_id: " .. tostring(result.anchor_id))
 end
 ```
+
+## Top viewers (WSS, no cookies)
+
+```lua
+client:on("room_user_seq", function(seq)
+    for _, c in ipairs(PirateTok.top_viewers(seq)) do
+        print(c.rank, c.user.nickname, c.score)
+    end
+end)
+```
+
+## Audience roster (optional, login-gated)
+
+The full viewer list behind the web viewer panel. Session cookies are **required for this call only** — without them you get `SessionRequired`.
+
+```lua
+local live = PirateTok.check_online("username_here")
+local aud, err = PirateTok.fetch_room_audience(
+    live.room_id, live.anchor_id, "sessionid=abc; sid_tt=abc")
+if aud then
+    print(aud.total, aud.anonymous)
+    for _, v in ipairs(aud.viewers) do print(v.rank, v.username, v.score) end
+end
+```
+
+`anchor_id` may be `nil` — it is then resolved via room info (one extra request).
 
 ## Room info (optional, separate call)
 
@@ -188,7 +214,7 @@ end)
 2. Authenticates and opens a direct WSS connection
 3. Sends protobuf heartbeats every 10s to keep alive
 4. Decodes protobuf event stream into Lua tables
-5. Auto-reconnects on stale/dropped connections with fresh credentials
+5. Auto-reconnects on stale/dropped connections, reusing the ttwid + UA; rotates them only on `DEVICE_BLOCKED` or a session that died within 30 s. A session that stayed up 30 s resets the retry counter
 
 All protobuf schemas are defined inline via `lua-protobuf` — no `.proto` files, no codegen, no build-time dependencies.
 
@@ -210,6 +236,7 @@ luajit examples/online_check.lua <username>      # check if user is live
 luajit examples/stream_info.lua <username>       # fetch room metadata + stream URLs
 luajit examples/gift_streak.lua <username>       # gift streak tracking with diamond totals
 luajit examples/profile_lookup.lua <username>    # fetch profile metadata + avatars (cached)
+luajit examples/audience.lua <username> <cookies> # full viewer roster (session cookies required)
 ```
 
 See `examples/love2d/` for Love2D game engine integration.
@@ -219,11 +246,13 @@ See `examples/love2d/` for Love2D game engine integration.
 Deterministic cross-lib validation against binary WSS captures. Requires testdata from a separate repo:
 
 ```bash
-git clone https://github.com/PirateTok/live-testdata testdata
+git clone https://github.com/PirateTok/live-testdata ../live-testdata
 make test
 ```
 
-Tests skip gracefully if testdata is not found. You can also set `PIRATETOK_TESTDATA` to point to a custom location.
+Missing testdata is a test failure, not a skip. Lookup order: `$PIRATETOK_TESTDATA`, `testdata/`, `../live-testdata/` (manifests in `manifests/` or `captures/manifests/`). The `_raw` (uncompressed) captures are not in live-testdata — supply them via `testdata/` or `PIRATETOK_TESTDATA`.
+
+`make test` also runs `tests/unit_test.lua` — offline tests for ttwid retry, reconnect policy, `ranks_list`/`top_viewers`, audience parsing and `check_online` error mapping.
 
 ## License
 
